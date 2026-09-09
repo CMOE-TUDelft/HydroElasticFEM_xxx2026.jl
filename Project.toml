@@ -2,3 +2,13 @@ name = "HydroElasticFEM_xxx2026"
 uuid = "eda7c932-2be7-4689-a78c-0b286c542e0c"
 authors = ["Oriol Colomés"]
 version = "0.0.1"
+
+[deps]
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
