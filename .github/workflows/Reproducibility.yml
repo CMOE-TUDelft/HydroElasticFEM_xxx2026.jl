@@ -1,0 +1,33 @@
+name: Reproducibility
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reproduce-paper:
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.11'
+
+      - name: Instantiate
+        run: |
+          julia --project=. -e '
+            using Pkg;
+            Pkg.instantiate()'
+
+      - name: Reproduce manuscript figures
+        run: |
+          julia --project=. scripts/reproduce_paper.jl
+
+      - name: Upload figures
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-figures
+          path: papers/LRHS2027/
