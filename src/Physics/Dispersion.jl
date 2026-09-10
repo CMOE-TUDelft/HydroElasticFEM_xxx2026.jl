@@ -44,3 +44,33 @@ function metaplate_dispersion(
     return (lower=sqrt(max(lower², zero(lower²))),
         upper=sqrt(max(upper², zero(upper²))))
 end
+
+"Linear frequency grading profile ωᵣ(x) from section 3.2.1."
+function ωᵣ_linear(
+    x::Real,
+    grading::FrequencyGradingParameters,
+)
+    0 <= x <= grading.grading_length ||
+        throw(DomainError(x, "linear grading coordinate must lie in [0, L]"))
+    return grading.natural_frequency_start * (1 - x / grading.grading_length)
+end
+
+"Exponential frequency grading profile ωᵣ(x) from section 3.2.1."
+function ωᵣ_exponential(
+    x::Real,
+    grading::FrequencyGradingParameters,
+)
+    x >= 0 || throw(DomainError(x, "exponential grading coordinate must be non-negative"))
+    return grading.natural_frequency_start * exp(-x / grading.grading_length)
+end
+
+"Return the local graded branches ω₋(k, x), ω₊(k, x)."
+function graded_dispersion(
+    plate::PlateParameters,
+    resonator::ResonatorParameters,
+    ωᵣ::Real,
+    k::Real,
+)
+    local_resonator = ResonatorParameters(resonator.n0, resonator.resonator_mass, ωᵣ)
+    return metaplate_dispersion(plate, local_resonator, k)
+end

@@ -22,6 +22,20 @@ using HydroElasticFEM_xxx2026
     @test_throws DomainError bare_dispersion(plate, 0.0)
 end
 
+@testset "Frequency-graded dispersion" begin
+    plate, resonator = liu_2025_parameters()
+    grading = FrequencyGradingParameters(10.0, 1.0, 1.0)
+    @test isapprox(ωᵣ_linear(0.0, grading), 10.0)
+    @test isapprox(ωᵣ_linear(0.9, grading), 1.0)
+    @test isapprox(ωᵣ_exponential(log(10.0), grading), 1.0)
+    branches = graded_dispersion(plate, resonator, ωᵣ_linear(0.5, grading), 1.0)
+    @test 0 < branches.lower < branches.upper
+    table = frequency_graded_table(plate, resonator, grading,
+        collect(range(-pi, pi; length=5)), [0.0, 0.5, 1.0])
+    @test size(table.lower) == (3, 5)
+    @test size(table.upper) == (3, 5)
+end
+
 @testset "Reproduction orchestration" begin
     plate, resonator = liu_2025_parameters()
     normalized_wave_numbers = collect(range(-pi, pi; length=5))

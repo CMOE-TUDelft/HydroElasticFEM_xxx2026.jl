@@ -13,6 +13,12 @@ struct ResonatorParameters{T<:Real}
     natural_frequency::T
 end
 
+struct FrequencyGradingParameters{T<:Real}
+    natural_frequency_start::T
+    natural_frequency_minimum::T
+    grading_length::T
+end
+
 "Parameters matching Liu et al. (2025), Table 1."
 function liu_2025_parameters(; tension=0.0)
     ρ = 1000.0

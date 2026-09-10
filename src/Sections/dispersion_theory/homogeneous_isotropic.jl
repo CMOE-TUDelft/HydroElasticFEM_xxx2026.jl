@@ -23,11 +23,10 @@ function run_non_dissipative_homogeneous_isotropic_lrh_plate(; output_directory=
     end
     savefig(make_non_dissipative_homogeneous_isotropic_lrh_plate_plot(
         L"\mathrm{LRH\ plate},\ T=0", tables.zero_tension, resonator;
-        y_limits=bandgap_limits(zero_tension_plate, resonator, normalized_wave_numbers)),
-        joinpath(output_directory, "LRH_T0_bandgap_zoom.png"))
+        y_limits=(9.5,10.5)), joinpath(output_directory, "LRH_T0_bandgap_zoom.png"))
     savefig(make_non_dissipative_homogeneous_isotropic_lrh_plate_plot(
         L"\mathrm{LRH\ plate},\ T>0", tables.pretensioned, resonator;
-        y_limits=bandgap_limits(pretensioned_plate, resonator, normalized_wave_numbers)),
+        y_limits=(9.5,10.5)),
         joinpath(output_directory, "LRH_Tpositive_bandgap_zoom.png"))
     write_dispersion_csv(joinpath(output_directory, "dispersion.csv"), tables)
     return output_directory

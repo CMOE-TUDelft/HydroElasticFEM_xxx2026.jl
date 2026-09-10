@@ -53,7 +53,11 @@ src/
 ├── Sections/
 │   └── dispersion_theory/
 │       ├── homogeneous_isotropic.jl
-│       └── homogeneous_isotropic_plot.jl
+│       ├── homogeneous_isotropic_plot.jl
+│       ├── frequency_graded.jl
+│       ├── frequency_graded_plot.jl
+│       ├── frequency_graded_run.jl
+│       └── frequency_graded_3d.jl
 └── Utilities/
     └── IO.jl
 
@@ -85,6 +89,29 @@ include("Sections/dispersion_theory/homogeneous_isotropic.jl")
 include("Sections/dispersion_theory/homogeneous_isotropic_plot.jl")
 include("Cases/RunAll.jl")
 end
+```
+
+The frequency-graded subsection uses the local WKB closure from manuscript
+section 3.2.1. Its four separate plots compare linear and exponential profiles
+for zero and positive pre-tension. Curves are sampled at fixed normalized
+positions and use the Liu reference range $\omega_r\in[1,10]$ rad/s, with the
+same $k/\sqrt{n_0}\in[-\pi,\pi]$ and $\omega\in[0,15]$ limits as the
+homogeneous dispersion figure.
+
+For band-gap inspection, the same four cases also produce interactive PlotlyJS
+HTML surfaces. Each surface has $k/\sqrt{n_0}$ on the first axis, $x/L$ on the
+second, and $\omega$ on the third. The lower and upper surfaces are rendered
+separately, with a translucent midpoint surface marking the gap between them.
+Open the HTML files in a browser and rotate, zoom, or hover over the surfaces.
+
+```julia
+using HydroElasticFEM_xxx2026
+run_frequency_graded_3d()
+```
+
+```julia
+using HydroElasticFEM_xxx2026
+run_frequency_graded_dispersion()
 ```
 
 Includes are ordered from data definitions to computations, then exports and
