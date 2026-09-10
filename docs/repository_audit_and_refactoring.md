@@ -1,0 +1,161 @@
+# Paper-reproduction repository audit
+
+## Scope and boundary
+
+This repository orchestrates paper experiments and owns their configurations,
+post-processing, exports, and figures. `HydroElasticFEM.jl` remains the
+authoritative dependency for finite-element operators, weak forms, assembly,
+meshes, physics kernels, and solvers. The analytical Appendix-A dispersion
+formula currently used for the Figure 3 reproduction remains here because it
+is a paper-specific closed-form reference, not an FEM implementation.
+
+## 1. Current audit
+
+### Strengths
+
+- The package has a small, testable analytical kernel.
+- The Appendix-A branches and Liu et al. parameter fixture are already covered
+  by tests.
+- The Figure 3 script produces both standalone plots and a CSV artifact.
+- The generated output has a stable, manuscript-oriented directory.
+
+### Weaknesses and classification
+
+| Current function or block | Classification | Issue |
+| --- | --- | --- |
+| `PlateParameters`, `ResonatorParameters` | Model definition | Correct ownership, but mixed with all other concerns. |
+| `liu_2025_parameters` | Model definition / fixture | A paper fixture was exported from the package root. |
+| `fluid_added_mass`, `restoring_coefficient` | Model definition | Analytical reference model; should be isolated from orchestration. |
+| `effective_mass`, `bare_dispersion`, `metaplate_dispersion` | Model definition | Scientific formulas are suitable for a focused physics file. |
+| `physical_wavenumber`, `case_curves` | Numerical experiment | Hard-coded script state made the sweep difficult to reuse. |
+| `bandgap_limits`, `add_bandgap_shading!` | Post-processing / figure generation | Data reduction and rendering were coupled. |
+| `make_panel` and the top-level loops | Figure generation | Plotting, case selection, and file naming were one script. |
+| CSV `open` block | Utility / export | Serialization was not reusable or independently testable. |
+
+The refactor now separates these active responsibilities into `Models`,
+`Physics`, `PostProcessing`, `Utilities`, `Figures`, and `Cases`. The old
+script is a thin compatibility entry point.
+
+## 2. Target hierarchy
+
+```text
+src/
+├── HydroElasticFEM_xxx2026.jl       # package composition and public API
+├── Cases/
+│   ├── Case01_WetModes.jl            # implemented Figure 3 reproduction
+│   ├── Case02_AvoidedCrossing.jl     # next PR
+│   ├── Case03_UndampedResponse.jl    # next PR
+│   ├── Case04_DampedResponse.jl      # next PR
+│   ├── Case05_BandgapAnalysis.jl     # next PR
+│   ├── Case06_ParametricStudy.jl     # next PR
+│   └── RunAll.jl
+├── Models/
+│   └── Configurations.jl             # membrane/resonator/wave configurations
+├── Physics/
+│   └── Dispersion.jl                 # paper-specific closed-form reference
+├── PostProcessing/
+│   └── Dispersion.jl                 # tables and band-gap metrics
+├── Figures/
+│   └── Figure03_WetModes.jl
+└── Utilities/
+    └── IO.jl
+
+figures/
+├── Figure03_WetModes/{run.jl,parameters.toml,process.jl,plot.jl}
+├── Figure04_ResponseSnapshots/...
+├── Figure05_ContourPlots/...
+├── Figure06_RTcoefficients/...
+└── Figure07_DampingStudy/...
+```
+
+The figure directories are the manuscript-facing layer. The Julia package
+files hold reusable functions; each figure `run.jl` should only select a
+configuration, call a case runner, and write artifacts.
+
+## 3. Include hierarchy
+
+```julia
+module HydroElasticFEM_xxx2026
+using Plots
+using LaTeXStrings
+
+include("Models/Configurations.jl")
+include("Physics/Dispersion.jl")
+include("PostProcessing/Dispersion.jl")
+include("Utilities/IO.jl")
+include("Figures/Figure03_WetModes.jl")
+include("Cases/Case01_WetModes.jl")
+include("Cases/RunAll.jl")
+end
+```
+
+Includes are ordered from data definitions to computations, then exports and
+case orchestration. No case file should implement FEM operators or solver
+logic; those calls should be made through the `HydroElasticFEM.jl` API.
+
+## 4. Dependency graph
+
+```mermaid
+flowchart TD
+    H[HydroElasticFEM_xxx2026] --> M[Models]
+    H --> P[Physics reference formulas]
+    H --> PP[PostProcessing]
+    H --> U[Utilities IO/cache/parameters]
+    H --> F[Figures]
+    H --> C[Cases]
+    C --> M
+    C --> P
+    C --> PP
+    C --> F
+    C --> U
+    C -. FEM experiments .-> D[HydroElasticFEM.jl]
+```
+
+The dependency direction is intentionally one-way. Figures consume processed
+tables; they do not recompute physics. Cases compose the dependency graph;
+they do not define shared numerical kernels.
+
+## 5. Ordered pull-request plan
+
+1. **PR 1: package composition and Figure 3 extraction.** Land the current
+   `Models`, `Physics`, `PostProcessing`, `Figures`, and `Case01` split while
+   preserving the old script and public analytical API.
+2. **PR 2: reproducibility contract.** Add `parameters.toml`, deterministic
+   output manifests, cache keys, and a `run.jl/process.jl/plot.jl` layout for
+   Figure 3.
+3. **PR 3: HydroElasticFEM adapter.** Add a small adapter layer that calls the
+   authoritative FEM package without copying its operators or solver code.
+4. **PR 4: Cases 02 and 03.** Add avoided-crossing and undamped-response
+   runners, each with focused regression tests and figure artifacts.
+5. **PR 5: Cases 04 and 05.** Add damping and band-gap studies, including
+   reflection/transmission, absorption, and energy metrics in PostProcessing.
+6. **PR 6: Case 06 and full workflow.** Add parameter sweeps, cache-aware
+   execution, `generate_all_figures()`, and a CI reproduction smoke test.
+7. **PR 7: documentation and release archive.** Add Documenter.jl pages,
+   environment instructions, artifact checksums, and a reviewer quick-start.
+
+## 6. Julia practice checklist
+
+- Keep configuration immutable and concrete, with one parameter type per
+  physical object.
+- Pass grids and configurations as arguments; avoid mutable module globals.
+- Use dotted broadcast for pointwise sweeps and return named tuples or typed
+  result structs at module boundaries.
+- Keep plotting out of numerical functions and serialization out of case
+  definitions.
+- Use Unicode identifiers such as `ρ`, `ωᵣ`, `Kᵣ`, `β`, and `γ` where they
+  match manuscript formulas; retain descriptive names for public APIs.
+- Add narrow tests for formulas, result table shapes, file schemas, and one
+  end-to-end figure runner per manuscript figure.
+- Run `julia --project=. -e 'using Pkg; Pkg.test()'` before publishing data.
+
+## 7. Reviewer workflow
+
+```julia
+using HydroElasticFEM_xxx2026
+generate_all_figures()
+```
+
+At the current repository state this regenerates the implemented Figure 3
+artifacts. As Cases 02–06 land, `RunAll.jl` is the single place where they are
+registered, so the reviewer command stays stable while the manuscript grows.

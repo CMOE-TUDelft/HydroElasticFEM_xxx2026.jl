@@ -21,3 +21,13 @@ using HydroElasticFEM_xxx2026
     @test bare_dispersion(pretensioned, k) > bare
     @test_throws DomainError bare_dispersion(plate, 0.0)
 end
+
+@testset "Reproduction orchestration" begin
+    plate, resonator = liu_2025_parameters()
+    normalized_wave_numbers = collect(range(-pi, pi; length=5))
+    table = dispersion_table(plate, resonator, normalized_wave_numbers)
+    @test length(table.bare) == 5
+    @test length(table.lower) == 5
+    @test first(table.k_over_sqrt_n0) == -pi
+    @test first(bandgap_limits(plate, resonator, normalized_wave_numbers)) >= 0
+end
