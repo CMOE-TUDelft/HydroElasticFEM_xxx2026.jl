@@ -1,5 +1,6 @@
-function run_case01(; output_directory=joinpath(@__DIR__, "..", "..", "data", "generated",
-        "subsubsec_non_dissipative_homogeneous_isotropic_dispersion"), n_points=701)
+function run_non_dissipative_homogeneous_isotropic_lrh_plate(; output_directory=joinpath(
+        @__DIR__, "..", "..", "..", "data", "generated",
+        "dispersion_theory", "homogeneous_isotropic"), n_points=701)
     gr()
     mkpath(output_directory)
     normalized_wave_numbers = collect(range(-pi, pi; length=n_points))
@@ -17,17 +18,17 @@ function run_case01(; output_directory=joinpath(@__DIR__, "..", "..", "data", "g
     for (case_name, title, plate, include_resonator) in cases
         table = dispersion_table(plate, resonator, normalized_wave_numbers;
             include_resonator=include_resonator)
-        savefig(make_wet_modes_panel(title, table, resonator),
-            joinpath(output_directory, "$(case_name).png"))
+        savefig(make_non_dissipative_homogeneous_isotropic_lrh_plate_plot(title, table,
+            resonator), joinpath(output_directory, "$(case_name).png"))
     end
-    savefig(make_wet_modes_panel(L"\mathrm{LRH\ plate},\ T=0", tables.zero_tension,
-        resonator; y_limits=bandgap_limits(zero_tension_plate, resonator,
-            normalized_wave_numbers)), joinpath(output_directory, "LRH_T0_bandgap_zoom.png"))
-    savefig(make_wet_modes_panel(L"\mathrm{LRH\ plate},\ T>0", tables.pretensioned,
-        resonator; y_limits=bandgap_limits(pretensioned_plate, resonator,
-            normalized_wave_numbers)), joinpath(output_directory, "LRH_Tpositive_bandgap_zoom.png"))
+    savefig(make_non_dissipative_homogeneous_isotropic_lrh_plate_plot(
+        L"\mathrm{LRH\ plate},\ T=0", tables.zero_tension, resonator;
+        y_limits=bandgap_limits(zero_tension_plate, resonator, normalized_wave_numbers)),
+        joinpath(output_directory, "LRH_T0_bandgap_zoom.png"))
+    savefig(make_non_dissipative_homogeneous_isotropic_lrh_plate_plot(
+        L"\mathrm{LRH\ plate},\ T>0", tables.pretensioned, resonator;
+        y_limits=bandgap_limits(pretensioned_plate, resonator, normalized_wave_numbers)),
+        joinpath(output_directory, "LRH_Tpositive_bandgap_zoom.png"))
     write_dispersion_csv(joinpath(output_directory, "dispersion.csv"), tables)
     return output_directory
 end
-
-const run_liu_2025_figure3 = run_case01

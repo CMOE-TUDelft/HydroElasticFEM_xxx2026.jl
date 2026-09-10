@@ -6,8 +6,9 @@ This repository orchestrates paper experiments and owns their configurations,
 post-processing, exports, and figures. `HydroElasticFEM.jl` remains the
 authoritative dependency for finite-element operators, weak forms, assembly,
 meshes, physics kernels, and solvers. The analytical Appendix-A dispersion
-formula currently used for the Figure 3 reproduction remains here because it
-is a paper-specific closed-form reference, not an FEM implementation.
+formula currently used for the non-dissipative homogeneous isotropic LRH
+dispersion subsection remains here because it is a paper-specific closed-form
+reference, not an FEM implementation.
 
 ## 1. Current audit
 
@@ -16,7 +17,7 @@ is a paper-specific closed-form reference, not an FEM implementation.
 - The package has a small, testable analytical kernel.
 - The Appendix-A branches and Liu et al. parameter fixture are already covered
   by tests.
-- The Figure 3 script produces both standalone plots and a CSV artifact.
+- The dispersion subsection runner produces both standalone plots and a CSV artifact.
 - The generated output has a stable, manuscript-oriented directory.
 
 ### Weaknesses and classification
@@ -42,35 +43,32 @@ script is a thin compatibility entry point.
 src/
 ├── HydroElasticFEM_xxx2026.jl       # package composition and public API
 ├── Cases/
-│   ├── Case01_WetModes.jl            # implemented Figure 3 reproduction
-│   ├── Case02_AvoidedCrossing.jl     # next PR
-│   ├── Case03_UndampedResponse.jl    # next PR
-│   ├── Case04_DampedResponse.jl      # next PR
-│   ├── Case05_BandgapAnalysis.jl     # next PR
-│   ├── Case06_ParametricStudy.jl     # next PR
-│   └── RunAll.jl
+│   └── RunAll.jl                     # aggregate manuscript workflow
 ├── Models/
 │   └── Configurations.jl             # membrane/resonator/wave configurations
 ├── Physics/
 │   └── Dispersion.jl                 # paper-specific closed-form reference
 ├── PostProcessing/
 │   └── Dispersion.jl                 # tables and band-gap metrics
-├── Figures/
-│   └── Figure03_WetModes.jl
+├── Sections/
+│   └── dispersion_theory/
+│       ├── homogeneous_isotropic.jl
+│       └── homogeneous_isotropic_plot.jl
 └── Utilities/
     └── IO.jl
 
-figures/
-├── Figure03_WetModes/{run.jl,parameters.toml,process.jl,plot.jl}
-├── Figure04_ResponseSnapshots/...
-├── Figure05_ContourPlots/...
-├── Figure06_RTcoefficients/...
-└── Figure07_DampingStudy/...
+data/generated/
+└── dispersion_theory/
+  └── homogeneous_isotropic/
+    ├── dispersion.csv
+    └── *.png
 ```
 
-The figure directories are the manuscript-facing layer. The Julia package
-files hold reusable functions; each figure `run.jl` should only select a
-configuration, call a case runner, and write artifacts.
+The section directories are the manuscript-facing layer. The Julia package
+files hold reusable functions; each subsection runner selects a configuration,
+calls the numerical workflow, and writes artifacts. A future manuscript
+subsection should receive its own directory using its section title and
+subsection title, without encoding the figure number.
 
 ## 3. Include hierarchy
 
@@ -83,8 +81,8 @@ include("Models/Configurations.jl")
 include("Physics/Dispersion.jl")
 include("PostProcessing/Dispersion.jl")
 include("Utilities/IO.jl")
-include("Figures/Figure03_WetModes.jl")
-include("Cases/Case01_WetModes.jl")
+include("Sections/dispersion_theory/homogeneous_isotropic.jl")
+include("Sections/dispersion_theory/homogeneous_isotropic_plot.jl")
 include("Cases/RunAll.jl")
 end
 ```
@@ -117,20 +115,20 @@ they do not define shared numerical kernels.
 
 ## 5. Ordered pull-request plan
 
-1. **PR 1: package composition and Figure 3 extraction.** Land the current
-   `Models`, `Physics`, `PostProcessing`, `Figures`, and `Case01` split while
-   preserving the old script and public analytical API.
+1. **PR 1: package composition and subsection extraction.** Land the current
+  `Models`, `Physics`, `PostProcessing`, and section/subsection split while
+  preserving the public analytical API.
 2. **PR 2: reproducibility contract.** Add `parameters.toml`, deterministic
    output manifests, cache keys, and a `run.jl/process.jl/plot.jl` layout for
-   Figure 3.
+  the non-dissipative homogeneous isotropic LRH dispersion subsection.
 3. **PR 3: HydroElasticFEM adapter.** Add a small adapter layer that calls the
    authoritative FEM package without copying its operators or solver code.
-4. **PR 4: Cases 02 and 03.** Add avoided-crossing and undamped-response
-   runners, each with focused regression tests and figure artifacts.
-5. **PR 5: Cases 04 and 05.** Add damping and band-gap studies, including
+4. **PR 4: additional dispersion subsections.** Add avoided-crossing and
+  undamped-response runners, each organized under its manuscript subsection.
+5. **PR 5: response subsections.** Add damping and band-gap studies, including
    reflection/transmission, absorption, and energy metrics in PostProcessing.
-6. **PR 6: Case 06 and full workflow.** Add parameter sweeps, cache-aware
-   execution, `generate_all_figures()`, and a CI reproduction smoke test.
+6. **PR 6: parameter-study workflow.** Add parameter sweeps, cache-aware
+  execution, `generate_all_figures()`, and a CI reproduction smoke test.
 7. **PR 7: documentation and release archive.** Add Documenter.jl pages,
    environment instructions, artifact checksums, and a reviewer quick-start.
 
@@ -156,6 +154,7 @@ using HydroElasticFEM_xxx2026
 generate_all_figures()
 ```
 
-At the current repository state this regenerates the implemented Figure 3
-artifacts. As Cases 02–06 land, `RunAll.jl` is the single place where they are
-registered, so the reviewer command stays stable while the manuscript grows.
+At the current repository state this regenerates the implemented
+non-dissipative homogeneous isotropic LRH dispersion artifacts. As additional
+subsections land, `RunAll.jl` is the single place where they are registered, so
+the reviewer command stays stable while the manuscript grows.

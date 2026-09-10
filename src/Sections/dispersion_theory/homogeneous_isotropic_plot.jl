@@ -10,7 +10,8 @@ function add_bandgap_shading!(panel, table)
     end
 end
 
-function make_wet_modes_panel(title, table, resonator; y_limits=(0.0, 15.0))
+function make_non_dissipative_homogeneous_isotropic_lrh_plate_plot(
+    title, table, resonator; y_limits=(0.0, 15.0))
     panel = plot(table.k_over_sqrt_n0, table.bare;
         label=table.lower === nothing ? L"\mathrm{Bare\ plate}" : L"\mathrm{Bare\ reference}",
         color=:black, linewidth=2, xlabel=L"k/\sqrt{n_0}",
