@@ -83,3 +83,64 @@ function anisotropic_optical_depths(
         x=x, y=y, Lx=Lx, Ly=Ly, attenuation_x=attenuation_x,
         attenuation_y=attenuation_y)
 end
+
+function anisotropic_density_table(
+    plate::PlateParameters,
+    resonator::ResonatorParameters,
+    normalized_wave_numbers,
+    normalized_positions;
+    Lx=4.0,
+    Ly=1.0,
+    axis=:x,
+)
+    axis in (:x, :y) || throw(ArgumentError("axis must be :x or :y"))
+    Lx > 0 || throw(DomainError(Lx, "Lx must be positive"))
+    Ly > 0 || throw(DomainError(Ly, "Ly must be positive"))
+    scale = sqrt(resonator.n0)
+    physical_wave_numbers = max.(abs.(normalized_wave_numbers) .* scale,
+        eps(Float64))
+    length_scale = axis === :x ? Lx : Ly
+    densities = [anisotropic_density(
+        axis === :x ? position * length_scale : 0.0,
+        axis === :y ? position * length_scale : 0.0,
+        resonator.n0, Lx, Ly) for position in normalized_positions]
+    branches = [density_graded_dispersion(plate, resonator, density, k)
+        for density in densities, k in physical_wave_numbers]
+    return (k_over_sqrt_n0=normalized_wave_numbers,
+        normalized_positions=normalized_positions, densities=densities,
+        lower=getproperty.(branches, :lower), upper=getproperty.(branches, :upper),
+        axis=axis, Lx=Lx, Ly=Ly)
+end
+
+function anisotropic_dispersion_field(
+    plate::PlateParameters,
+    resonator::ResonatorParameters,
+    normalized_wave_numbers;
+    Lx=4.0,
+    Ly=1.0,
+    x_values=collect(range(-4.0, 4.0; length=161)),
+    y_values=collect(range(-4.0, 4.0; length=161)),
+)
+    Lx > 0 || throw(DomainError(Lx, "Lx must be positive"))
+    Ly > 0 || throw(DomainError(Ly, "Ly must be positive"))
+    scale = sqrt(resonator.n0)
+    wave_numbers = max.(abs.(normalized_wave_numbers) .* scale, eps(Float64))
+    lower = Array{Float64}(undef, length(y_values), length(x_values),
+        length(wave_numbers))
+    upper = similar(lower)
+    reference = [density_graded_dispersion(plate, resonator, 0.0, k)
+        for k in wave_numbers]
+    for (row, y) in enumerate(y_values), (column, x) in enumerate(x_values)
+        density = anisotropic_density(x * Lx, y * Ly, resonator.n0, Lx, Ly)
+        branches = [density_graded_dispersion(plate, resonator, density, k)
+            for k in wave_numbers]
+        lower[row, column, :] = getproperty.(branches, :lower)
+        upper[row, column, :] = getproperty.(branches, :upper)
+    end
+    lower_reference = reshape(getproperty.(reference, :lower), 1, 1, :)
+    upper_reference = reshape(getproperty.(reference, :upper), 1, 1, :)
+    return (x=x_values, y=y_values, k_over_sqrt_n0=normalized_wave_numbers,
+        lower=lower, upper=upper,
+        lower_shift=lower .- lower_reference,
+        upper_shift=upper .- upper_reference, Lx=Lx, Ly=Ly)
+end

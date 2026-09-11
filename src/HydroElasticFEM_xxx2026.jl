@@ -34,7 +34,10 @@ export PlateParameters, ResonatorParameters, FrequencyGradingParameters,
     n_density_graded, Mᵣ, density_graded_dispersion, density_graded_table,
     run_density_graded_dispersion, make_density_graded_surface, run_density_graded_3d,
     anisotropic_density, anisotropic_resonant_wavenumber, anisotropic_density_field,
-    anisotropic_optical_depths, run_anisotropic_density_dispersion,
+    anisotropic_density_table, make_anisotropic_density_panel,
+    anisotropic_dispersion_field, make_anisotropic_density_surface,
+    anisotropic_optical_depths,
+    run_anisotropic_density_dispersion,
     generate_all_figures
 
 end

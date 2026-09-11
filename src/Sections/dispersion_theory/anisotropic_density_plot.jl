@@ -25,3 +25,48 @@ function make_anisotropic_optical_depth_plot(aspect_ratios, ratios, profiles)
     return Plots.plot(ratio_plot, profile_plot; layout=(1, 2), size=(1400, 600),
         dpi=300, fontfamily="Computer Modern")
 end
+
+function make_anisotropic_density_panel(title, field; color=:viridis)
+    n_wave_numbers = length(field.k_over_sqrt_n0)
+    lower_limit = maximum(abs, field.lower_shift)
+    upper_limit = maximum(abs, field.upper_shift)
+    lower_limits = (-lower_limit, lower_limit)
+    upper_limits = (-upper_limit, upper_limit)
+    panels = Any[]
+    for (branch_name, values, limits) in (("lower shift", field.lower_shift, lower_limits),
+        ("upper shift", field.upper_shift, upper_limits))
+        for wave_number_index in 1:n_wave_numbers
+            heatmap = Plots.heatmap(field.x, field.y,
+                values[:, :, wave_number_index];
+                xlabel=L"x/L_x", ylabel=L"y/L_y",
+                title="$branch_name, k = $(round(field.k_over_sqrt_n0[wave_number_index]; digits=2))",
+                color=color, clims=limits, colorbar=true,
+                colorbar_title="frequency shift (rad s^-1)", aspect_ratio=1,
+                grid=false, fontfamily="Computer Modern", titlefontsize=10,
+                guidefontsize=9, tickfontsize=8, colorbar_tickfontsize=8)
+            push!(panels, heatmap)
+        end
+    end
+    return Plots.plot(panels...; layout=(2, n_wave_numbers),
+        size=(1500, 850), dpi=300, fontfamily="Computer Modern")
+end
+
+function make_anisotropic_density_surface(title, table)
+    coordinate = table.normalized_positions
+    lower_surface = PlotlyJS.surface(x=table.k_over_sqrt_n0, y=coordinate,
+        z=table.lower, colorscale=[[0.0, "royalblue"], [1.0, "royalblue"]],
+        showscale=false, opacity=0.9, name="lower branch",
+        hovertemplate="k/√n₀=%{x:.3f}<br>$(table.axis)/L=%{y:.3f}<br>ω₋=%{z:.3f}<extra></extra>")
+    upper_surface = PlotlyJS.surface(x=table.k_over_sqrt_n0, y=coordinate,
+        z=table.upper, colorscale=[[0.0, "firebrick"], [1.0, "firebrick"]],
+        showscale=false, opacity=0.9, name="upper branch",
+        hovertemplate="k/√n₀=%{x:.3f}<br>$(table.axis)/L=%{y:.3f}<br>ω₊=%{z:.3f}<extra></extra>")
+    layout = Layout(title=title,
+        scene=attr(xaxis=attr(title="k/√n₀", range=[-pi, pi]),
+            yaxis=attr(title="$(table.axis)/L", range=[minimum(coordinate), maximum(coordinate)]),
+            zaxis=attr(title="ω (rad s⁻¹)", range=[0, 15]),
+            camera=attr(eye=attr(x=1.55, y=1.45, z=1.15))),
+        width=1100, height=850, margin=attr(l=0, r=0, b=0, t=65),
+        legend=attr(x=0.02, y=0.98))
+    return PlotlyJS.plot([lower_surface, upper_surface], layout)
+end
