@@ -1,7 +1,7 @@
 function run_frequency_graded_dispersion(; output_directory=joinpath(
         @__DIR__, "..", "..", "..", "data", "generated", "dispersion_theory",
         "frequency_graded"), n_points=701, n_positions=7)
-    gr()
+    Plots.gr()
     mkpath(output_directory)
     normalized_wave_numbers = collect(range(-pi, pi; length=n_points))
     zero_tension_plate, resonator = liu_2025_parameters()
@@ -32,7 +32,7 @@ function run_frequency_graded_dispersion(; output_directory=joinpath(
             L"\mathrm{Exponential\ grading},\ T>0", tables.exponential_positive),
     )
     for (name, figure) in pairs(plots)
-        savefig(figure, joinpath(output_directory, "frequency_graded_$(name).png"))
+        Plots.savefig(figure, joinpath(output_directory, "frequency_graded_$(name).png"))
     end
     return output_directory
 end

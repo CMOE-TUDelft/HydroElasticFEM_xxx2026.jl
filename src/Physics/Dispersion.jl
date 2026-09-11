@@ -74,3 +74,33 @@ function graded_dispersion(
     local_resonator = ResonatorParameters(resonator.n0, resonator.resonator_mass, ωᵣ)
     return metaplate_dispersion(plate, local_resonator, k)
 end
+
+"Exponential resonator-density profile n(x) from section 3.2.2."
+function n_density_graded(
+    x::Real,
+    grading::DensityGradingParameters,
+)
+    x >= 0 || throw(DomainError(x, "density grading coordinate must be non-negative"))
+    return grading.n0 * exp(-x / grading.grading_length)
+end
+
+"Local resonator mass loading Mᵣ(x)=n(x)mᵨ,r for density grading."
+function Mᵣ(
+    resonator::ResonatorParameters,
+    n_x::Real,
+)
+    n_x >= 0 || throw(DomainError(n_x, "resonator density must be non-negative"))
+    return n_x * resonator.resonator_mass
+end
+
+"Return the local density-graded branches ω₋(k,x), ω₊(k,x)."
+function density_graded_dispersion(
+    plate::PlateParameters,
+    resonator::ResonatorParameters,
+    n_x::Real,
+    k::Real,
+)
+    local_resonator = ResonatorParameters(n_x, resonator.resonator_mass,
+        resonator.natural_frequency)
+    return metaplate_dispersion(plate, local_resonator, k)
+end

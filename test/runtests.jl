@@ -22,6 +22,22 @@ using HydroElasticFEM_xxx2026
     @test_throws DomainError bare_dispersion(plate, 0.0)
 end
 
+@testset "Density-graded dispersion" begin
+    plate, resonator = liu_2025_parameters()
+    grading = DensityGradingParameters(resonator.n0, 1.0)
+    @test isapprox(n_density_graded(0.0, grading), resonator.n0)
+    @test isapprox(n_density_graded(1.0, grading), resonator.n0 / exp(1))
+    @test isapprox(Mᵣ(resonator, 0.5), 5.0)
+    branches = density_graded_dispersion(plate, resonator,
+        n_density_graded(0.5, grading), 1.0)
+    @test 0 < branches.lower < branches.upper
+    table = density_graded_table(plate, resonator, grading,
+        collect(range(-pi, pi; length=5)), [0.0, 0.5, 1.0])
+    @test size(table.lower) == (3, 5)
+    @test first(table.densities) > last(table.densities)
+    @test all(table.local_frequency .== resonator.natural_frequency)
+end
+
 @testset "Frequency-graded dispersion" begin
     plate, resonator = liu_2025_parameters()
     grading = FrequencyGradingParameters(10.0, 1.0, 1.0)

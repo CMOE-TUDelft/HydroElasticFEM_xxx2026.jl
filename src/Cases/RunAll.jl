@@ -6,5 +6,9 @@ function generate_all_figures(; output_root=joinpath(@__DIR__, "..", "..", "data
         frequency_graded=run_frequency_graded_dispersion(output_directory=joinpath(
             output_root, "dispersion_theory", "frequency_graded")),
         frequency_graded_3d=run_frequency_graded_3d(output_directory=joinpath(
-            output_root, "dispersion_theory", "frequency_graded")))
+            output_root, "dispersion_theory", "frequency_graded")),
+        density_graded=run_density_graded_dispersion(output_directory=joinpath(
+            output_root, "dispersion_theory", "density_graded")),
+        density_graded_3d=run_density_graded_3d(output_directory=joinpath(
+            output_root, "dispersion_theory", "density_graded")))
 end

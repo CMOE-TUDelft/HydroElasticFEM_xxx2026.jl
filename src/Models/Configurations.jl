@@ -19,6 +19,11 @@ struct FrequencyGradingParameters{T<:Real}
     grading_length::T
 end
 
+struct DensityGradingParameters{T<:Real}
+    n0::T
+    grading_length::T
+end
+
 "Parameters matching Liu et al. (2025), Table 1."
 function liu_2025_parameters(; tension=0.0)
     ρ = 1000.0
