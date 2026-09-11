@@ -2,7 +2,6 @@ module HydroElasticFEM_xxx2026
 
 using Plots
 using LaTeXStrings
-using PlotlyJS
 
 include("Models/Configurations.jl")
 include("Physics/Dispersion.jl")

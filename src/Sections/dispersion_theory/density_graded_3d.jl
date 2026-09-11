@@ -22,8 +22,8 @@ function run_density_graded_3d(; output_directory=joinpath(
     titles = (T0="Density grading, T = 0", Tpositive="Density grading, T > 0")
     for name in keys(tables)
         figure = make_density_graded_surface(titles[name], tables[name])
-        PlotlyJS.savefig(figure, joinpath(output_directory,
-            "density_graded_$(name)_3d.html"))
+        Plots.savefig(figure, joinpath(output_directory,
+            "density_graded_$(name)_3d.png"))
     end
     return output_directory
 end

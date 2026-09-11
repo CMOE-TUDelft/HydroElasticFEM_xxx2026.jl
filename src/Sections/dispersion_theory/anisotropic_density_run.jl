@@ -39,8 +39,8 @@ function run_anisotropic_density_dispersion(; output_directory=joinpath(
     for axis in (:x, :y)
         figure = make_anisotropic_density_surface(
             "Anisotropic density, $(axis)-slice, T > 0", tables[axis])
-        PlotlyJS.savefig(figure, joinpath(output_directory,
-            "anisotropic_density_$(axis)_3d.html"))
+        Plots.savefig(figure, joinpath(output_directory,
+            "anisotropic_density_$(axis)_3d.png"))
     end
     return output_directory
 end

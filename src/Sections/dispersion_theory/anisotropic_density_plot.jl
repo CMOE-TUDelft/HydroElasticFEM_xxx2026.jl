@@ -53,20 +53,12 @@ end
 
 function make_anisotropic_density_surface(title, table)
     coordinate = table.normalized_positions
-    lower_surface = PlotlyJS.surface(x=table.k_over_sqrt_n0, y=coordinate,
-        z=table.lower, colorscale=[[0.0, "royalblue"], [1.0, "royalblue"]],
-        showscale=false, opacity=0.9, name="lower branch",
-        hovertemplate="k/√n₀=%{x:.3f}<br>$(table.axis)/L=%{y:.3f}<br>ω₋=%{z:.3f}<extra></extra>")
-    upper_surface = PlotlyJS.surface(x=table.k_over_sqrt_n0, y=coordinate,
-        z=table.upper, colorscale=[[0.0, "firebrick"], [1.0, "firebrick"]],
-        showscale=false, opacity=0.9, name="upper branch",
-        hovertemplate="k/√n₀=%{x:.3f}<br>$(table.axis)/L=%{y:.3f}<br>ω₊=%{z:.3f}<extra></extra>")
-    layout = Layout(title=title,
-        scene=attr(xaxis=attr(title="k/√n₀", range=[-pi, pi]),
-            yaxis=attr(title="$(table.axis)/L", range=[minimum(coordinate), maximum(coordinate)]),
-            zaxis=attr(title="ω (rad s⁻¹)", range=[0, 15]),
-            camera=attr(eye=attr(x=1.55, y=1.45, z=1.15))),
-        width=1100, height=850, margin=attr(l=0, r=0, b=0, t=65),
-        legend=attr(x=0.02, y=0.98))
-    return PlotlyJS.plot([lower_surface, upper_surface], layout)
+    surface_plot = Plots.surface(table.k_over_sqrt_n0, coordinate, table.lower;
+        color=:blues, colorbar=false, title=title,
+        xlabel="k/√n₀", ylabel="$(table.axis)/L", zlabel="ω (rad s⁻¹)",
+        xlims=(-pi, pi), ylims=(minimum(coordinate), maximum(coordinate)),
+        zlims=(0, 15), camera=(55, 25), size=(1100, 850), dpi=300)
+    Plots.surface!(surface_plot, table.k_over_sqrt_n0, coordinate, table.upper;
+        color=:reds, colorbar=false)
+    return surface_plot
 end
