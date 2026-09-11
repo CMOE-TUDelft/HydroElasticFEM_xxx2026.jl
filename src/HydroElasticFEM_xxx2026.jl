@@ -18,6 +18,9 @@ include("Sections/dispersion_theory/density_graded.jl")
 include("Sections/dispersion_theory/density_graded_plot.jl")
 include("Sections/dispersion_theory/density_graded_run.jl")
 include("Sections/dispersion_theory/density_graded_3d.jl")
+include("Sections/dispersion_theory/anisotropic_density.jl")
+include("Sections/dispersion_theory/anisotropic_density_plot.jl")
+include("Sections/dispersion_theory/anisotropic_density_run.jl")
 include("Cases/RunAll.jl")
 
 export PlateParameters, ResonatorParameters, FrequencyGradingParameters,
@@ -30,6 +33,8 @@ export PlateParameters, ResonatorParameters, FrequencyGradingParameters,
     make_frequency_graded_surface, run_frequency_graded_3d,
     n_density_graded, Mᵣ, density_graded_dispersion, density_graded_table,
     run_density_graded_dispersion, make_density_graded_surface, run_density_graded_3d,
+    anisotropic_density, anisotropic_resonant_wavenumber, anisotropic_density_field,
+    anisotropic_optical_depths, run_anisotropic_density_dispersion,
     generate_all_figures
 
 end
