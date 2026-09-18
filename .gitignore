@@ -1,2 +1,8 @@
 data/generated/*
 Manifest.toml
+*.png
+*.vtk
+*.jld2
+*.vtu
+*.pvd
+*.pvsm

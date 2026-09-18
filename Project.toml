@@ -4,12 +4,16 @@ authors = ["Oriol Colomés"]
 version = "0.0.1"
 
 [deps]
+Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 HydroElasticFEM = "e85360b2-c40c-44d1-92ad-66f8d48f49a1"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+WaveSpec = "908d4cf6-a6c0-449c-92e4-852c8f288332"
 
 [compat]
+Gridap = "0.20.9"
 HydroElasticFEM = "0.1.2"
+WaveSpec = "0.3.1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
