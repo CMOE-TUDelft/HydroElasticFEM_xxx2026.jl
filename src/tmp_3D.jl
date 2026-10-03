@@ -74,10 +74,10 @@ fmin_fac = 0.7
 #   Δt       Newmark step: ≤ Tmin/25 (dev) … Tmin/40 (production)
 #   T        simulated time: ~20 Tp transient + statistics window
 #   Δt_out   VTK output interval
-const WARM = (; Δ = 100.0, nz = 1, zbase = 2.0, fmax_fac = 2.0, nf = 40, nθ = 11,
+const WARMUP = (; Δ = 10.0, nz = 1, zbase = 2.0, fmax_fac = 2.0, nf = 40, nθ = 11,
                Δt = 0.2, T = 0.2, Δt_out = 0.2, seed = 1234, vtk_output = true)
 const DEV = (; Δ = 10.0, nz = 4, zbase = 2.0, fmax_fac = 2.0, nf = 40, nθ = 11,
-               Δt = 0.2, T = 400.0, Δt_out = 1.0, seed = 1234, vtk_output = true)
+               Δt = 0.2, T = 4.0, Δt_out = 1.0, seed = 1234, vtk_output = true)
 const PROD = (; Δ = 5.0, nz = 5, zbase = 2.0, fmax_fac = 2.5, nf = 50, nθ = 11,
                 Δt = 0.1, T = 1400.0, Δt_out = 0.5, seed = 1234, vtk_output = true)
 
@@ -353,7 +353,7 @@ function _print_setup(ws, lay, p)
 end
 
 # Warm-up (compilation), development run, production run
-@timeit to "warm_up" main(merge(DEV, (; T = 2 * DEV.Δt, vtk_output = false)))
+@timeit to "warm_up" main(WARMUP)
 @timeit to "dev"     main(DEV)
 # @timeit to "prod"    main(PROD)
 
