@@ -33,4 +33,4 @@ jobs:
         run: |
           julia --project=. -e '
             using Pkg;
-            Pkg.test()'
+            Pkg.test(julia_args=["-O1"])'

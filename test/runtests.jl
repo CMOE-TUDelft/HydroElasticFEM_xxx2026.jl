@@ -61,3 +61,4 @@ end
     @test first(table.k_over_sqrt_n0) == -pi
     @test first(bandgap_limits(plate, resonator, normalized_wave_numbers)) >= 0
 end
+include("test_workflow.jl")
