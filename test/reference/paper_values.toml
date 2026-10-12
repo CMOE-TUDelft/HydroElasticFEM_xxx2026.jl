@@ -1,0 +1,85 @@
+# Published or independently computed values that the reference library
+# (src/common/reference_solutions.jl) must reproduce.
+#
+# Sources:
+#   paper  — J2025-LRMM, sec_discrete_lattice.tex / dispersion_theory.tex
+#            (computed there with bloch_bands_fig.py, |n| <= 4000)
+#   matrix — docs/verification_test_matrix.md §0.2 (independent NumPy/SciPy
+#            root finding with finite-difference D0')
+# `digits` is the number of significant digits quoted at the source; tests use
+# a tolerance of half a unit in the last quoted digit.
+
+[paper.band_edges]           # fig:lat_bands, P1 line array, a = 1 m
+T0  = { omega_X = 9.646, omega_Gamma = 9.986, digits = 4 }
+T98 = { omega_X = 9.916, omega_Gamma = 9.990, digits = 4 }
+
+[paper.gap_width]            # Δω/ω_r of the complete stop band
+T0  = { value = 0.034,  digits = 2 }
+T98 = { value = 0.0074, digits = 2 }
+
+[paper.Pi_L]                 # eq:lat_PiL, exact sum
+T0  = { value = 2.86e-3, digits = 3 }
+T98 = { value = 1.94e-3, digits = 3 }
+plate_estimate_T0 = { value = 2.83e-3, digits = 3 }
+square_coefficient = { value = 3.87e-3, digits = 3 }   # Z(2)/(16π⁴)
+
+[paper.local_model]
+anticrossing_T0  = { value = 0.163, digits = 3 }      # fig:subsubsec_non_dissipative_...
+# Exact value 0.13747; the paper (fig. caption and sec_discrete_lattice) quotes
+# 0.138, a rounding slip — should read 0.137 (or 0.1375).
+anticrossing_T98 = { value = 0.1375, digits = 4, paper = 0.138 }
+kc_a_over_pi_T0  = { value = 0.87,  digits = 2 }
+kc_a_over_pi_T98 = { value = 0.61,  digits = 2 }
+lower_at_zone_edge_T0  = { value = 9.813, digits = 4 } # local branch truncated at qa = π
+lower_at_zone_edge_T98 = { value = 9.959, digits = 4 }
+
+# matrix §0.2: P1 bare host, lossless
+[[matrix.host]]
+T_rho = 0.0
+omega = 5.0
+k0 = 1.758
+D0p = 18.73
+gamma_r_2 = 0.0534
+gamma_r_3 = 0.0469
+Q_rad = 74.9
+
+[[matrix.host]]
+T_rho = 0.0
+omega = 9.646
+k0 = 2.691
+D0p = 51.05
+gamma_r_2 = 0.0196
+gamma_r_3 = 0.0264
+Q_rad = 54.9
+
+[[matrix.host]]
+T_rho = 0.0
+omega = 10.0
+k0 = 2.742
+D0p = 53.69
+gamma_r_2 = 0.0186
+gamma_r_3 = 0.0255
+Q_rad = 53.7
+
+[[matrix.host]]
+T_rho = 9.8
+omega = 5.0
+k0 = 1.113
+D0p = 44.69
+gamma_r_2 = 0.0224
+gamma_r_3 = 0.0125
+Q_rad = 179.0
+
+[[matrix.host]]
+T_rho = 9.8
+omega = 10.0
+k0 = 1.926
+D0p = 78.72
+gamma_r_2 = 0.0127
+gamma_r_3 = 0.0122
+Q_rad = 78.7
+
+[matrix.decay_lengths]       # ω = 10 rad/s
+flexural_T0  = 0.374         # 1/Im k_c
+flexural_T98 = 0.226
+evanescent_first = 6.31      # 1/κ₁ (≈ 2H/π, not H/π)

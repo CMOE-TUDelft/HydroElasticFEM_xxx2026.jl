@@ -62,3 +62,4 @@ end
     @test first(bandgap_limits(plate, resonator, normalized_wave_numbers)) >= 0
 end
 include("test_workflow.jl")
+include("test_references.jl")
