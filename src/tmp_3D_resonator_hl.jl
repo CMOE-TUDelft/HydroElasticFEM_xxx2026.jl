@@ -63,7 +63,7 @@ order = 2
 const SMOKE = (; Δ = 10.0, nz = 1, zbase = 2.0, fmax_fac = 2.0, nf = 5, nθ = 3,
                  Δt = 0.2, T = 0.4, Δt_out = 0.2, seed = 1234, vtk_output = false)
 const DEV = (; Δ = 10.0, nz = 3, zbase = 2.0, fmax_fac = 2.0, nf = 40, nθ = 11,
-               Δt = 0.2, T = 400.0, Δt_out = 0.4, seed = 1234, vtk_output = true)
+               Δt = 0.2, T = 4.0, Δt_out = 0.4, seed = 1234, vtk_output = true)
 const PROD = (; Δ = 5.0, nz = 5, zbase = 2.0, fmax_fac = 2.5, nf = 50, nθ = 11,
                 Δt = 0.1, T = 1400.0, Δt_out = 0.5, seed = 1234, vtk_output = true)
 
