@@ -80,8 +80,10 @@ include("plot_theme.jl")
 include("common/workflow.jl")
 include("common/parameter_sets.jl")
 include("common/reference_solutions.jl")
+include("common/fe_builders.jl")
+include("common/observables.jl")
 
-export ParameterSets, References
+export ParameterSets, References, FEBuilders, Observables
 export run_tests, list_tests
 export output_root, with_output_root, sims_path, exp_pro_path, plots_path
 export provenance, produce_or_load_case

@@ -35,4 +35,6 @@ run_tests("all"; test_suit=true)  # warm-up cases only (smoke test)
 ```
 
 Run heavy cases with `julia --project -O1 -t <n>`. HydroElasticFEM.jl is
-expected as a `dev` checkout in `../HydroElasticFEM.jl`.
+tracked from its `main` branch (`Pkg.add(url=..., rev="main")`); every
+simulation record stores the Manifest pin (`hefem_rev`, `hefem_tree`).
+To work against a local checkout instead, `Pkg.develop(path="../HydroElasticFEM.jl")`.

@@ -63,3 +63,4 @@ end
 end
 include("test_workflow.jl")
 include("test_references.jl")
+include("test_fe_builders.jl")

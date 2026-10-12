@@ -34,11 +34,13 @@ end
             @test isfile(file)
             @test startswith(file, sims_path("L0-1"))
             @test data["result"] == 6.0
-            for key in ("test_id", "matrix_version", "hefem_version", "hefem_commit",
-                        "julia_version", "nthreads", "wall_time_s", "gitcommit")
+            for key in ("test_id", "matrix_version", "hefem_version", "hefem_source", "hefem_rev",
+                        "hefem_tree", "hefem_commit", "julia_version", "nthreads", "wall_time_s",
+                        "gitcommit")
                 @test haskey(data, key)
             end
             @test data["test_id"] == "L0-1"
+            @test data["hefem_tree"] != "unknown"
 
             data2, file2 = produce_or_load_case(run, DummyCase(), "L0-1")
             @test calls[] == 1          # loaded, not recomputed

@@ -11,6 +11,7 @@ Output layout (relative to `output_root()`, the repository root by default):
 """
 
 import HydroElasticFEM
+import TOML
 
 const REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
 
@@ -53,10 +54,25 @@ plots_path(test_id::AbstractString, args...) =
 
 function _git_commit(path::AbstractString)
     try
-        return readchomp(`git -C $path rev-parse HEAD`)
+        return readchomp(pipeline(`git -C $path rev-parse HEAD`; stderr=devnull))
     catch
         return "unknown"
     end
+end
+
+"""
+    _hefem_pin()
+
+HydroElasticFEM source as pinned in this repository's Manifest: repository
+URL or dev path, tracked revision and git tree hash.
+"""
+function _hefem_pin()
+    manifest = joinpath(REPO_ROOT, "Manifest.toml")
+    isfile(manifest) || return (source="unknown", rev="unknown", tree="unknown")
+    entry = only(TOML.parsefile(manifest)["deps"]["HydroElasticFEM"])
+    return (source=get(entry, "repo-url", get(entry, "path", "registry")),
+            rev=get(entry, "repo-rev", "unknown"),
+            tree=get(entry, "git-tree-sha1", "unknown"))
 end
 
 """
@@ -64,14 +80,20 @@ end
 
 Metadata stored with every simulation record, in addition to the git commit
 and patch of this repository added by DrWatson (`tag=true`).
+`hefem_commit` is only known when HydroElasticFEM is a `dev` checkout;
+otherwise the Manifest pin (`hefem_source`, `hefem_rev`, `hefem_tree`)
+identifies the code.
 """
 function provenance(test_id::AbstractString)
-    hefem_dir = pkgdir(HydroElasticFEM)
+    pin = _hefem_pin()
     return Dict{String,Any}(
         "test_id"        => String(test_id),
         "matrix_version" => MATRIX_VERSION,
         "hefem_version"  => string(pkgversion(HydroElasticFEM)),
-        "hefem_commit"   => _git_commit(hefem_dir),
+        "hefem_source"   => pin.source,
+        "hefem_rev"      => pin.rev,
+        "hefem_tree"     => pin.tree,
+        "hefem_commit"   => _git_commit(pkgdir(HydroElasticFEM)),
         "julia_version"  => string(VERSION),
         "nthreads"       => Threads.nthreads(),
     )
