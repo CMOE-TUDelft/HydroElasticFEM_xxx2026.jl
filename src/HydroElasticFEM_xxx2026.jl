@@ -78,7 +78,10 @@ export PlateParameters, ResonatorParameters, FrequencyGradingParameters,
 
 include("plot_theme.jl")
 include("common/workflow.jl")
+include("common/parameter_sets.jl")
+include("common/reference_solutions.jl")
 
+export ParameterSets, References
 export run_tests, list_tests
 export output_root, with_output_root, sims_path, exp_pro_path, plots_path
 export provenance, produce_or_load_case
