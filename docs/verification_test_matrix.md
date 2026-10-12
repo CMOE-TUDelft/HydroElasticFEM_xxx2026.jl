@@ -38,7 +38,7 @@ P3 and P4 are the frozen sets in `deliverables/06_Numerical_Verification/data/VT
 | 5 | 9.8 | 1.113 | 5.64 | 2.46 | 44.7 | 0.0224 | 0.0125 | 0.022 | 0.0125 | 179 |
 | 10 | 9.8 | 1.926 | 3.26 | 0.62 | 78.7 | 0.0127 | 0.0122 | 0.0064 | 0.0061 | 79 |
 
-Near-field scales at ω = 10: flexural-root decay length 1/Im k ≈ 0.37 m (T=0), 0.23 m (T=9.8); fluid evanescent decay H/π = 3.18 m.
+Near-field scales at ω = 10: flexural-root decay length 1/Im k ≈ 0.37 m (T=0), 0.23 m (T=9.8); slowest fluid evanescent decay 1/κ₁ = 6.31 m (≈ 2H/π: for ω²H/g ≫ 1 the first evanescent roots lie near i(n − ½)π/H, not inπ/H; corrected 2026-10-12 from the reference library).
 ζ_crit uses |κ_r| ≈ k_ρr (ωc ≪ k_ρr); the script must use the exact condition γ_d = γ_r.
 
 P1-LF wavenumbers (bare host, T=0): ω=1: λ_p = 51.6 m (H=10), 32.3 m (H=3), 59.7 m (H=20); ω=2: 15.3 m (H=10), 13.6 m (H=3).
@@ -52,7 +52,7 @@ Published band edges (P1, `fig:lat_bands`): [ω_X, ω_Γ] = [9.646, 9.986] (T=0)
 | FE orders | p_φ = 2; κ, η Q2 with C/DG plate (γ = 6); also p = 3 for rate checks |
 | Mesh ladder | h_plate = λ_p/{8,16,32}; open water h ≤ λ_open/6.4; vertical nz = {8,16,32} graded towards surface (top cell k·h_z ≤ 0.2) |
 | Resonator near field | local refinement h_min = λ_p/{12,24,48} within R = λ_p/4 of each x_i (3D) |
-| Truncation | generating/absorbing zones ≥ 4λ, gap ≥ max(λ/2, 3H/π) between structure/array and zone |
+| Truncation | generating/absorbing zones ≥ 4λ, gap ≥ max(λ/2, 5/κ₁) between structure/array and zone (κ₁ = first evanescent root at the run frequency, from `References.host_roots`) |
 | Identity tests (I) | relative residual ≤ 1e-10 (round-off) |
 | Discretisation tests (D) | observed rate ≥ theoretical − 0.3 on the two finest levels, and Richardson-extrapolated error ≤ 1e-3 relative |
 | Asymptotic tests (A) | FE − local-theory discrepancy E(ε) fitted as Cε^p; p within ±0.3 of the predicted order, C reported |
@@ -120,7 +120,7 @@ Output: ½ω² c_ρ,i |η(x_i) − q_i|² vs. Im(α_i)|η(x_i)|²/ω-form; open-
 
 ## Level 1 — Vertical section, configuration A (fully covered surface)
 
-Common setup: plate covers the whole top boundary; incident hydroelastic wave generated in a generating zone; absorbing zone at the far end tuned to k₀ of the plate (not the open-water k). Gap ≥ 3H/π = 9.6 m between array ends and zones.
+Common setup: plate covers the whole top boundary; incident hydroelastic wave generated in a generating zone; absorbing zone at the far end tuned to k₀ of the plate (not the open-water k). Gap ≥ 5/κ₁ ≈ 32 m at ω = 10 (κ₁ = 0.158 m⁻¹) between array ends and zones.
 
 ### L1.1 Bare-host dispersion
 Theory link: `eq:lat_symbol`, `eq:Zf_closed_form`, deep/shallow limits `eq:deep_water_poly`, `eq:shallow_water_poly`. Type: D.
@@ -204,7 +204,7 @@ Theory link: `eq:lat_1d_exact`, `eq:lat_1d_single`. Type: D/A.
 
 | Parameter | Values |
 |---|---|
-| a | {0.25, 0.5, 1, 2, 4, 8} m (spans 0.37 m flexural and 3.18 m fluid decay lengths) |
+| a | {0.25, 0.5, 1, 2, 4, 8} m (spans 0.37 m flexural and 6.31 m fluid decay lengths) |
 | Resonator | m_ρr = 0.01a (fixed mass ratio n₀m_ρr = 0.01), ω_r = 10 |
 | T_ρ | 0 |
 | Route | as L1.5 (Route A preferred) |
