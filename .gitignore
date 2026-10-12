@@ -10,3 +10,11 @@ Manifest.toml
 *.csv
 *.pdf
 *.txt
+
+# Verification suite: raw simulation records are not committed ...
+data/sims/
+data/VTKOutput/
+# ... but processed data, paper figures and tables are.
+!data/exp_pro/**/*.csv
+!plots/**/*.png
+!plots/**/*.pdf
