@@ -19,14 +19,14 @@ using Roots: find_zero, Bisection
 using ..ParameterSets: HostSpec, ResonatorSpec, natural_frequency
 
 export added_mass, D0, dD0, k_open, k0, host_roots
-export green_1d, green_1d_integral, green_2d, green_2d_integral
+export green_1d, green_1d_integral, green_1d_patch, green_2d, green_2d_integral
 export inv_alpha, alpha, gamma_r, gamma_d, energy_flux
 export lattice_sum_1d, lattice_sum_1d_modal, bloch_residual_1d, bloch_roots_1d
 export omega_gamma_1d, omega_X_1d, lower_band_maximum_1d, lattice_compliance_number_1d
 export Pi_L_estimate_plate, Pi_L_estimate_membrane, Pi_L_estimate_square
 export local_branches, crossing_wavenumber, anticrossing_width
 export single_resonator_1d, cross_sections_3d, renormalised_frequency, critical_damping, Q_rad
-export foldy_1d, foldy_2d, single_mode_cos_qa, fabry_perot_transmission
+export foldy_1d, foldy_2d, point_source_field_1d, single_mode_cos_qa, fabry_perot_transmission
 
 # ─── Bare host symbol, eq. (lat_symbol) ─────────────────────────────────────
 
@@ -480,6 +480,44 @@ function foldy_1d(h::HostSpec, ω::Real, xs::AbstractVector, resonators::Abstrac
     T = 1 + im / (d * A) * sum(α .* η .* exp.(-im * kp .* xs))
     absorbed = 2 / (d * abs2(A)) * sum(imag.(α) .* abs2.(η))
     return (η=η, R=R, T=T, absorbed=absorbed, energy_residual=abs2(R) + abs2(T) + absorbed - 1)
+end
+
+"""
+    green_1d_patch(h, x, ω, b; roots=host_roots(h, ω))
+
+Response to a unit force spread uniformly over a patch of width `b` centred at
+0 (pressure 1/b), for |x| ≥ b/2:
+G_b(x) = i Σₙ sinc(kₙb/2) e^{ikₙ|x|}/𝒟₀′(kₙ), sinc(s) = sin(s)/s.
+Reduces to `green_1d` for b → 0.
+"""
+function green_1d_patch(h::HostSpec, x::Real, ω::Real, b::Real; roots=host_roots(h, ω))
+    b == 0 && return green_1d(h, x, ω; roots=roots)
+    abs(x) >= b / 2 || throw(DomainError(x, "residue form of the patch response requires |x| ≥ b/2"))
+    s(k) = sin(k * b / 2) / (k * b / 2)
+    return im * sum(k -> s(k) * exp(im * k * abs(x)) / dD0(h, k, ω), roots)
+end
+
+"""
+    point_source_field_1d(h, ω, x_s, F, xs, resonators; b=0, roots=host_roots(h, ω))
+
+Vertical-section response to a density-normalised force `F` at `x_s` (spread
+over a patch of width `b`) with line resonators at `xs` (eq. lat_coupled):
+η(x) = F G_b(x − x_s) + Σⱼ αⱼ ηⱼ G(x − xⱼ), with ηⱼ from the Foldy system
+driven by ηⱼ^inc = F G_b(xⱼ − x_s). Returns the attachment displacements and
+the field as a function of x (valid for |x − x_s| ≥ b/2).
+"""
+function point_source_field_1d(h::HostSpec, ω::Real, x_s::Real, F::Number,
+                               xs::AbstractVector, resonators::AbstractVector{ResonatorSpec};
+                               b::Real=0.0, roots=host_roots(h, ω))
+    N = length(xs)
+    length(resonators) == N || throw(DimensionMismatch("one resonator per position"))
+    G(x) = green_1d(h, x, ω; roots=roots)
+    Gs(x) = green_1d_patch(h, x, ω, b; roots=roots)
+    α = alpha.(resonators, ω)
+    Gm = [G(xs[i] - xs[j]) for i in 1:N, j in 1:N]
+    η = N == 0 ? ComplexF64[] : (I - Gm * Diagonal(α)) \ [F * Gs(x - x_s) for x in xs]
+    field(x) = F * Gs(x - x_s) + sum((α[j] * η[j] * G(x - xs[j]) for j in 1:N); init=zero(ComplexF64))
+    return (η=η, field=field)
 end
 
 """
