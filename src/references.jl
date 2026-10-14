@@ -1,22 +1,65 @@
 """
-Analytical and semi-analytical references of Sections 3 (`sec:dispersion_relation`)
-and 4 (`sec:discrete_lattice`) of the paper, used to verify the FE results.
+Analytical and semi-analytical references of the paper, shared by all tests.
+This is the only shared code of the repository: it contains no FE, only the
+formulas of Section 3 (`sec:dispersion_relation`, `dispersion_theory.tex`) and
+Section 4 (`sec:discrete_lattice`, `discrete_lattices.tex`) that the FE results
+are compared with. Each function cites its equation label.
 
-Conventions: density-normalised quantities, time factor exp(-iωt), configuration A
-(the plate covers the whole free surface, flat bottom of depth H). `dim = 2` is the
+Conventions: density-normalised quantities (subscript ρ: m_ρ = m/ρ,
+T_ρ = T/ρ, C_ρ = D/ρ), time factor exp(−iωt), configuration A (the plate
+covers the whole free surface, flat bottom of depth H). `dim = 2` is the
 vertical section, `dim = 3` the 3D fluid with a 2D isotropic plate.
 
-Square lattice sums in 3D (`eq:lat_kummer`, `eq:lat_2d_rect`) are added with the
-L3 tests.
+Tested in `test/test_references.jl` (internal consistency and pins against the
+values published in the paper, `test/reference/paper_values.toml`).
 """
 module References
 
 using LinearAlgebra
+using Parameters
 using SpecialFunctions: besselj, hankelh1
 using QuadGK: quadgk
 using Roots: find_zero, Bisection
 
-using ..ParameterSets: HostSpec, ResonatorSpec, natural_frequency
+export HostSpec, ResonatorSpec
+export resonator_from_frequency, natural_frequency, damping_ratio, with_damping_ratio
+
+# ─── Model parameters ───────────────────────────────────────────────────────
+
+"""
+Bare host: pre-tensioned Kirchhoff–Love plate on a fluid of depth `H`
+(`H = Inf` for deep water), eq. (lat_symbol). `τ`, `τ_b` are the tension and
+bending damping times; `ν` is only used by 3D plates.
+"""
+@with_kw struct HostSpec
+    g::Float64 = 9.8
+    ρ::Float64 = 1000.0
+    H::Float64 = 10.0
+    m_ρ::Float64
+    C_ρ::Float64 = 0.0
+    T_ρ::Float64 = 0.0
+    τ::Float64 = 0.0
+    τ_b::Float64 = 0.0
+    ν::Float64 = 0.0
+end
+
+"Single resonator: mass, stiffness and damping per unit fluid density."
+@with_kw struct ResonatorSpec
+    m_ρ::Float64
+    k_ρ::Float64
+    c_ρ::Float64 = 0.0
+end
+
+"Resonator with natural frequency `ω_r` and damping ratio `ζ`, eq. (resonator_natural_freq_damping)."
+function resonator_from_frequency(m_ρ::Real, ω_r::Real; ζ::Real=0.0)
+    k_ρ = m_ρ * ω_r^2
+    return ResonatorSpec(m_ρ=m_ρ, k_ρ=k_ρ, c_ρ=2ζ * sqrt(k_ρ * m_ρ))
+end
+
+natural_frequency(r::ResonatorSpec) = sqrt(r.k_ρ / r.m_ρ)
+damping_ratio(r::ResonatorSpec) = r.c_ρ / (2sqrt(r.k_ρ * r.m_ρ))
+with_damping_ratio(r::ResonatorSpec, ζ::Real) = resonator_from_frequency(r.m_ρ, natural_frequency(r); ζ=ζ)
+
 
 export added_mass, D0, dD0, k_open, k0, host_roots, kappa1
 export green_1d, green_1d_integral, green_1d_patch, green_2d, green_2d_integral

@@ -1,107 +1,318 @@
 """
-L1-1 — Bare-host dispersion and Green function (`eq:lat_symbol`,
-`eq:lat_green_1d`, `eq:lat_flux`).
+# L1-1 — Bare host: dispersion and Green function (configuration A, vertical section)
 
-The bare P1 plate (configuration A) is driven by a density-normalised force F
-spread over a patch of width b at the centre of the window. At one frequency
-and one mesh the run returns:
+## Relation to the paper
 
-- the discrete wavenumber k_h, fitted on probe windows on either side of the
-  source (`Observables.fit_waves`), against k₀;
-- the radiative width from the far-field amplitude, γ = A/(iF sinc(k₀b/2)),
-  with the waves entering from the sponges removed, against γ_r = 1/𝒟₀′(k₀);
-- the near field between the patch edge and the probe windows, after removing
-  the propagating waves entering from the sponges, against F·G_b(x − x_s)
-  (`References.green_1d_patch`), with the real and imaginary parts reported
-  separately (Re G is the part of the Green function that sets the
-  renormalised resonance of L1-3). The error after also removing the fitted
-  incoming evanescent modes (`Observables.incoming_field`) is returned as a
-  diagnostic (`*_evan`): on 3 λ_p probe windows the slowest evanescent mode
-  entering from the end and the one leaving the source are nearly collinear,
-  so that correction is ill-conditioned (≈ 1e-2 errors at ω = 10); the
-  κ₁-based buffer removes the evanescent reflection instead.
+The bare host is the floating plate without resonators. Its symbol
+
+    D₀(k, ω) = ρg + (1 − iωτ)Tk² + (1 − iωτ_b)Dk⁴ − ω²[m + ρ/(k tanh kH)]     (eq:host_symbol)
+
+defines the propagating root k₀ (D₀(k₀) = 0, the flexural–gravity wave), and in
+the vertical section the response to a unit point force is the Green function
+
+    G(x) = i Σₘ e^{ikₘ|x|}/D₀′(kₘ),   Im G(x) = cos(k₀x)/D₀′(k₀)             (eq:lat_green_1d)
+
+whose propagating term radiates two waves of amplitude 1/D₀′(k₀), carrying the
+power ½ω Im G(0) (eq:point_power, eq:energy_flux). G, k₀ and γ_r = Im G(0) are
+the building blocks of every resonator result of Section 4
+(`sec:discrete_lattice`): a resonator enters only through 1/α − G(0). This test
+checks that the monolithic FE formulation (eq:discreteform_freq, Section
+`sec:numerical_formulation`) reproduces them. The code uses density-normalised
+quantities (D₀/ρ, F/ρ), so G here is ρ times the G of the paper.
+
+Verification test matrix: §L1.1 (with the γ_r part of §L1.2).
+
+## Problem
+
+Configuration A, vertical section: the plate covers the whole free surface of
+a channel of depth H, with rigid walls at both ends.
+
+    wall ── sponge ── buffer ── │ probe ··· source ··· probe │ ── buffer ── sponge ── wall
+                                └──────── window ─────────┘
+
+- Source: a density-normalised force F spread uniformly over a patch of width
+  b = `source_elements` elements, centred on a mesh node. HydroElasticFEM's
+  `rhs_fn` takes distributed loads only; the exact patch response is
+  G_b(x) = i Σₘ sinc(kₘb/2) e^{ikₘ|x|}/D₀′(kₘ) for |x| ≥ b/2.
+- Sponges: viscoelastic bending EI(x) = C_ρ(1 − i s(x)) over
+  `sponge_wavelengths` plate wavelengths, s ramping to `sponge_strength`.
+  They act on bending only, so they absorb poorly where tension or gravity
+  dominate (long waves); the reflected waves are removed in post-processing.
+- Buffer: the slowest fluid evanescent mode, e^{−κ₁|x|} with 1/κ₁ ≈ 2H/π, is
+  not damped by the sponges and is reflected by them and by the walls. The
+  buffer keeps the source `gap_decays`/κ₁ away from the sponges (with ±4 λ_p
+  and a one-wavelength buffer, the reflection left a mesh-independent error of
+  9e-6 in Re G).
+
+## Observables (one frequency, one mesh)
+
+1. Discrete wavenumber k_h: least-squares fit, on probe windows on either
+   side of the source, of A⁺e^{ikx} + A⁻e^{−ikx} plus the flexural pair and a
+   few evanescent modes decaying from the window ends (`fit_waves`), with k
+   fitted. Error |k_h/k₀ − 1|.
+2. Radiative width from the far field: the source is transparent to waves
+   coming back from the sponges, so the radiated amplitude is
+   A_out − A_in(other side), and γ_h = A/(iF sinc(k₀b/2)). Error against
+   γ_r = 1/D₀′(k₀).
+3. Near field: plate deflection between the patch edge and the probes, minus
+   the propagating waves coming back from the sponges, against F·G_b(x − x_s);
+   real and imaginary parts separately (Re G sets the renormalised resonance
+   of a resonator, L1-3).
+
+## Parameters
+
+`L1_1_Params` holds every parameter of a case. The fields listed in
+`VARIABLE` are the ones a study varies; they name the simulation record. All
+other fields are fixed for the study; they are stored in the record and a hash
+of them is appended to the record name, so changing a fixed value never
+reuses an old record.
+
+## Reproduce
+
+    julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl
 """
-module L1_1_BareHostDispersion
+module L1_1
 
+using Gridap
 using Parameters
 using LinearAlgebra: norm
-using ..ParameterSets: P1
-using ..References: k0, dD0, gamma_r, host_roots, green_1d_patch, kappa1
-using ..FEBuilders: solve_configA, graded_mesh
-using ..Observables: fit_waves, sample_plate, incoming_field
+using Roots: find_zero, Bisection
+import HydroElasticFEM.Geometry as G
+import HydroElasticFEM.Physics as P
+import HydroElasticFEM.Simulation as S
+import HydroElasticFEM.ParameterHandler as PH
+using HydroElasticFEM: map_vertical_GP_for_const_dep
 
-export L1_1_params, run_L1_1
+using ..References: HostSpec, k0, kappa1, host_roots, gamma_r, green_1d_patch
+
+export L1_1_Params, VARIABLE, fixed_hash, run_case
 
 """
-Case of L1-1: host (`T_ρ`, depth `H`), frequency `ω`, mesh
-(`elements_per_wavelength`, `order`, vertical grading `max_ratio`) and layout in
-plate wavelengths: the window spans ±`half_window` λ_p around the source, and
-the probes start `probe_offset` λ_p from it. The buffer to the sponges is the
-builder default (source ≥ 5/κ₁ from the sponges, `FEBuilders.configA_channel`):
-with the sponges 11.5 m from the source at ω = 10 (P1, 1/κ₁ = 6.3 m), the
-evanescent reflection left a mesh-independent error of 9e-6 in Re G.
+Parameters of one L1-1 case. Lengths of the layout are in plate wavelengths
+λ_p = 2π/k₀(ω) unless stated otherwise.
 """
-@with_kw struct L1_1_params
-    T_ρ::Float64 = 0.0
-    H::Float64 = 10.0
-    ω::Float64 = 10.0
-    elements_per_wavelength::Int = 20
-    order::Int = 2
-    max_ratio::Float64 = 1.2
-    half_window::Float64 = 4.0
-    probe_offset::Float64 = 1.0
-    n_modes::Int = 6
+@with_kw struct L1_1_Params
+    # ── Variable: what a study sweeps (names the record) ──────────────────────
+    ω::Float64 = 10.0                     # frequency (rad/s)
+    elements_per_wavelength::Int = 20     # horizontal elements per λ_p
+    order::Int = 2                        # polynomial order of ϕ and η
+
+    # ── Fixed: host, set P1 of the test matrix = Table 1 of the paper ────────
+    g::Float64 = 9.8                      # gravity (m/s²)
+    ρ::Float64 = 1000.0                   # fluid density (kg/m³)
+    H::Float64 = 10.0                     # depth (m)
+    m_ρ::Float64 = 0.01                   # plate mass / ρ (m)
+    C_ρ::Float64 = 0.49                   # bending stiffness D / ρ (m⁵/s²)
+    T_ρ::Float64 = 0.0                    # pre-tension / ρ (m³/s²)
+
+    # ── Fixed: forcing ────────────────────────────────────────────────────────
+    F::Float64 = 1.0                      # force / ρ (m⁴/s² per unit width)
+    source_elements::Int = 2              # patch width b in elements
+
+    # ── Fixed: layout ─────────────────────────────────────────────────────────
+    half_window::Float64 = 4.0            # window = source ± half_window
+    probe_offset::Float64 = 1.0           # probes start this far from the source
+    gap_decays::Float64 = 5.0             # source ≥ gap_decays/κ₁ from the sponges
+    sponge_wavelengths::Float64 = 6.0     # sponge length
+    sponge_strength::Float64 = 3.0        # maximum loss factor s
+    sponge_power::Int = 2                 # ramp s ∝ ξ^power
+
+    # ── Fixed: discretisation ─────────────────────────────────────────────────
+    top_fraction::Float64 = 0.5           # top vertical cell / horizontal size
+    max_ratio::Float64 = 1.2              # maximum vertical growth ratio
+    γ_penalty::Float64 = 6.0              # C/DG interior penalty of the plate
+
+    # ── Fixed: post-processing ────────────────────────────────────────────────
+    n_modes::Int = 6                      # non-propagating modes in the wave fit
+    n_samples::Int = 400                  # samples per probe / near-field window
 end
 
-"Run one L1-1 case; returns the raw FE measures and their references."
-function run_L1_1(p::L1_1_params)
-    @unpack T_ρ, H, ω, elements_per_wavelength, order, max_ratio, half_window, probe_offset, n_modes = p
-    h = P1(T_ρ=T_ρ).host
-    h = typeof(h)(h; H=H)
-    F = 1.0
-    kp = k0(h, ω)
-    λ = 2π / kp
-    mesh = graded_mesh(h, ω, elements_per_wavelength; order=order, max_ratio=max_ratio)
-    sol = solve_configA(h, ω; window_length=2half_window * λ, source_x=half_window * λ, F=F, mesh=mesh)
-    lay = sol.layout
-    xs, b = lay.source_x, lay.source_width
-    roots = host_roots(h, ω)
+"Fields of `L1_1_Params` varied by the L1-1 study (they name the records)."
+const VARIABLE = (:ω, :elements_per_wavelength, :order)
 
-    # far field: discrete wavenumber and outgoing/incoming amplitudes
-    right = fit_waves(sol.ηh, roots, xs + probe_offset * λ, lay.window[2]; x_ref=xs, n_modes=n_modes)
-    left = fit_waves(sol.ηh, roots, lay.window[1], xs - probe_offset * λ; x_ref=xs, n_modes=n_modes)
+"Short hash of the fixed parameters, appended to the record name."
+function fixed_hash(p::L1_1_Params)
+    fixed = Tuple(getfield(p, f) for f in fieldnames(L1_1_Params) if !(f in VARIABLE))
+    return string(hash(fixed); base=16, pad=16)[1:8]
+end
+
+"Bare host of the case, in the notation of `References`."
+host(p::L1_1_Params) = HostSpec(g=p.g, ρ=p.ρ, H=p.H, m_ρ=p.m_ρ, C_ρ=p.C_ρ, T_ρ=p.T_ρ)
+
+# ─── Geometry and mesh ──────────────────────────────────────────────────────
+
+"""
+    layout(p)
+
+Absolute geometry: channel length `L`, sponge length `Ls`, buffer, window,
+source centre `x_s` (on a mesh node), patch width `b`, number of elements `nx`
+and element size `he`.
+"""
+function layout(p::L1_1_Params)
+    h = host(p)
+    λ = 2π / k0(h, p.ω)
+    Ls = p.sponge_wavelengths * λ
+    half = p.half_window * λ
+    buffer = max(λ, p.gap_decays / kappa1(h, p.ω) - half)   # source ≥ gap_decays/κ₁ from the sponges
+    L = 2 * (Ls + buffer + half)
+    nx = ceil(Int, L * p.elements_per_wavelength / λ)
+    he = L / nx
+    x_s = round((L / 2) / he) * he
+    return (; λ, L, Ls, buffer, window=(Ls + buffer, L - Ls - buffer), x_s,
+            b=p.source_elements * he, nx, he)
+end
+
+"""
+    vertical_mesh(p, he)
+
+Number of vertical elements and growth ratio of a geometric progression
+(finest at the surface) whose top cell is `top_fraction·he` and whose ratio
+does not exceed `max_ratio`. Halving `he` adds ≈ log 2/log(max_ratio) layers.
+"""
+function vertical_mesh(p::L1_1_Params, he::Real)
+    h_top = p.top_fraction * he
+    p.H <= h_top && return (ny=1, ratio=1.0)
+    ny = ceil(Int, log(1 + p.H * (p.max_ratio - 1) / h_top) / log(p.max_ratio))
+    p.H / ny <= h_top && return (ny=ny, ratio=1.0)
+    ratio = find_zero(r -> p.H * (r - 1) / (r^ny - 1) - h_top, (1.0 + 1e-12, p.max_ratio + 1e-9), Bisection())
+    return (ny=ny, ratio=ratio)
+end
+
+"Loss factor s(x) of the plate sponges (0 outside them)."
+function sponge_loss(p::L1_1_Params, x::Real, L::Real, Ls::Real)
+    ξ = max(Ls - x, x - (L - Ls), 0.0) / Ls
+    return p.sponge_strength * ξ^p.sponge_power
+end
+
+# ─── FE problem (HydroElasticFEM.jl) ────────────────────────────────────────
+
+"""
+    solve(p)
+
+Build and solve the frequency-domain problem with HydroElasticFEM: potential
+flow in the channel (`PotentialFlow`), the plate as a tensioned
+Euler–Bernoulli beam with C/DG bending (`TensionedEulerBernoulliBeam`, sponge
+through a complex EI(x)), and the patch load through `rhs_fn`. Returns the
+plate deflection `ηh`, the layout, the vertical mesh and the number of DOFs.
+"""
+function solve(p::L1_1_Params)
+    lay = layout(p)
+    vm = vertical_mesh(p, lay.he)
+    H, L = p.H, lay.L
+    vertical_map(x) = VectorValue(x[1], map_vertical_GP_for_const_dep(x[2] - H, vm.ratio, vm.ny, H; dbgmsg=false))
+    tank = G.TankDomain(L=L, H=H, nx=lay.nx, ny=vm.ny, map=vertical_map, is_periodic=(false, false),
+                        structure_domains=[G.StructureDomain(L=L, x₀=[0.0, 0.0], domain_symbol=:Γs)])
+
+    fe(; kw...) = PH.FESpaceConfig(; order=p.order, vector_type=Vector{ComplexF64}, kw...)
+    fluid = P.PotentialFlow(g=p.g, ρw=p.ρ, fe=fe(), space_domain_symbol=:Ω)
+    EI(x) = p.C_ρ * (1 - im * sponge_loss(p, x[1], L, lay.Ls))
+    plate = P.TensionedEulerBernoulliBeam(L=L, mᵨ=p.m_ρ, EIᵨ=EI, Tᵨ=p.T_ρ, g=p.g, symbol=:η,
+                                          fe=fe(γ=p.γ_penalty), space_domain_symbol=:Γs)
+
+    load(x) = abs(x[1] - lay.x_s) < lay.b / 2 ? complex(p.F / lay.b) : zero(ComplexF64)
+    # `rhs_fn` returns one load per field, in the field order of the FieldMap
+    # it receives (HydroElasticFEM's internal `_map`; no public accessor)
+    field_order(fmap) = [s for (s, _) in sort!(collect(fmap._map); by=last)]
+    rhs_fn = (ctx, fmap) -> [sym == :η ? load : 0.0 for sym in field_order(fmap)]
+
+    problem = S.build_problem(tank, P.PhysicsParameters[fluid, plate], PH.FreqDomainConfig(ω=p.ω); rhs_fn=rhs_fn)
+    result = S.simulate(problem)
+    ηh = result.solution[result.fmap[:η]]
+    return (; ηh, lay, vm, ndofs=length(get_free_dof_values(result.solution)))
+end
+
+# ─── Post-processing ────────────────────────────────────────────────────────
+
+"Plate deflection sampled at `xs` on the surface z = 0."
+sample(ηh, xs) = ComplexF64[ηh(Point(x, 0.0)) for x in xs]
+
+"""
+    fit_waves(xs, ηs, roots; x_ref, n_modes, k=nothing)
+
+Least-squares fit of a source-free plate field on a window [xa, xb]:
+
+    η(x) = A⁺e^{ik(x−x_ref)} + A⁻e^{−ik(x−x_ref)} + Σₙ cₙ⁺e^{ikₙ(x−xa)} + cₙ⁻e^{ikₙ(xb−x)},
+
+with kₙ = `roots[2:n_modes+1]` (flexural pair, then evanescent; Im kₙ > 0).
+With `k = nothing` the propagating wavenumber is fitted: the residual is
+scanned on a grid within ±5 % of k₀ = `roots[1]`, then minimised by
+golden-section search. Keep `n_modes` small: deep evanescent modes are
+nearly zero across the window and make the fit ill-conditioned.
+Returns `(Aplus, Aminus, k, residual)`.
+"""
+function fit_waves(xs::AbstractVector{<:Real}, ηs::AbstractVector, roots::AbstractVector;
+                   x_ref::Real, n_modes::Int, k::Union{Nothing,Real}=nothing)
+    xa, xb = extrema(xs)
+    ks = roots[2:(n_modes + 1)]
+    function lsq(kk)
+        cols = [exp.(im * kk .* (xs .- x_ref)), exp.(-im * kk .* (xs .- x_ref))]
+        for kn in ks
+            push!(cols, exp.(im * kn .* (xs .- xa)), exp.(im * kn .* (xb .- xs)))
+        end
+        M = reduce(hcat, cols)
+        c = M \ ηs
+        return c, norm(M * c - ηs) / norm(ηs)
+    end
+    if k === nothing
+        kp = real(roots[1])
+        grid = range(0.95kp, 1.05kp; length=201)
+        i = argmin([last(lsq(kk)) for kk in grid])
+        a, b = grid[max(i - 1, 1)], grid[min(i + 1, end)]
+        φ = (sqrt(5) - 1) / 2
+        while b - a > 1e-13kp
+            c1, c2 = b - φ * (b - a), a + φ * (b - a)
+            last(lsq(c1)) < last(lsq(c2)) ? (b = c2) : (a = c1)
+        end
+        k = (a + b) / 2
+    end
+    c, res = lsq(k)
+    return (Aplus=c[1], Aminus=c[2], k=k, residual=res)
+end
+
+"""
+    run_case(p) -> Dict
+
+Solve one L1-1 case and return the FE observables, their references and the
+case metadata (raw values; errors and checks are formed by the script).
+"""
+function run_case(p::L1_1_Params)
+    h = host(p)
+    sol = solve(p)
+    lay = sol.lay
+    x_s, b, λ = lay.x_s, lay.b, lay.λ
+    roots = host_roots(h, p.ω)
+    kp = real(roots[1])
+
+    # 1–2. far field on both sides: wavenumber and amplitudes
+    probe(xa, xb) = (xs = range(xa, xb; length=p.n_samples);
+                     fit_waves(xs, sample(sol.ηh, xs), roots; x_ref=x_s, n_modes=p.n_modes))
+    right = probe(x_s + p.probe_offset * λ, lay.window[2])
+    left = probe(lay.window[1], x_s - p.probe_offset * λ)
     out_R, in_R = right.Aplus, right.Aminus
     out_L, in_L = left.Aminus, left.Aplus
     s = sin(kp * b / 2) / (kp * b / 2)
-    γ_R = (out_R - in_L) / (im * s * F)
-    γ_L = (out_L - in_R) / (im * s * F)
+    γ_R = (out_R - in_L) / (im * s * p.F)
+    γ_L = (out_L - in_R) / (im * s * p.F)
 
-    # near field on the right of the patch, incoming sponge waves removed
-    # (the source is transparent to them)
-    kh = right.k
-    xn = collect(range(xs + b / 2, xs + probe_offset * λ; length=401))
-    incoming_prop(x) = in_L * exp(im * kh * (x - xs)) + in_R * exp(-im * kh * (x - xs))
-    ηraw = sample_plate(sol.ηh, xn)
-    ηn = ηraw .- incoming_prop.(xn)
-    ηe = ηraw .- incoming_field.(Ref(left), Ref(right), xn)
-    ηref = [F * green_1d_patch(h, max(x - xs, b / 2), ω, b; roots=roots) for x in xn]   # round-off at the edge
-    rel(a, b) = norm(a - b) / norm(b)
+    # 3. near field right of the patch, propagating waves from the sponges removed
+    xn = collect(range(x_s + b / 2, x_s + p.probe_offset * λ; length=p.n_samples))
+    incoming(x) = in_L * exp(im * right.k * (x - x_s)) + in_R * exp(-im * right.k * (x - x_s))
+    ηn = sample(sol.ηh, xn) .- incoming.(xn)
+    # max(·, b/2): x − x_s falls a round-off below b/2 at the patch edge
+    ηref = [p.F * green_1d_patch(h, max(x - x_s, b / 2), p.ω, b; roots=roots) for x in xn]
+    rel(a, r) = norm(a - r) / norm(r)
 
     return Dict{String,Any}(
         "k0" => kp, "k_h_R" => right.k, "k_h_L" => left.k,
-        "gamma_r" => gamma_r(h, ω; dim=2), "gamma_far_R" => γ_R, "gamma_far_L" => γ_L,
-        "x_near" => xn .- xs, "eta_near_h" => ηn, "eta_near_ref" => ηref,
-        "err_near" => rel(ηn, ηref), "err_near_re" => rel(real(ηn), real(ηref)),
-        "err_near_im" => rel(imag(ηn), imag(ηref)),
-        "err_near_re_evan" => rel(real(ηe), real(ηref)), "err_near_im_evan" => rel(imag(ηe), imag(ηref)),
-        "eta_edge_h" => first(ηn), "eta_edge_ref" => first(ηref),
+        "gamma_r" => gamma_r(h, p.ω; dim=2), "gamma_far_R" => γ_R, "gamma_far_L" => γ_L,
+        "err_near_re" => rel(real(ηn), real(ηref)), "err_near_im" => rel(imag(ηn), imag(ηref)),
+        "x_near" => xn .- x_s, "eta_near_h" => ηn, "eta_near_ref" => ηref,
         "sponge_reflection" => max(abs(in_R / out_R), abs(in_L / out_L)),
         "fit_residual" => max(right.residual, left.residual),
-        "lambda_p" => λ, "b" => b, "element_size" => lay.element_size, "nx" => lay.nx,
-        "sponge_distance" => xs - lay.sponge_length, "kappa1" => kappa1(h, ω),
-        "ny" => mesh.ny, "vertical_ratio" => mesh.vertical_ratio,
-        "ndofs" => length(sol.result.solution.free_values),
+        "lambda_p" => λ, "kappa1" => kappa1(h, p.ω), "L" => lay.L, "buffer" => lay.buffer,
+        "b" => b, "element_size" => lay.he, "nx" => lay.nx, "ny" => sol.vm.ny,
+        "vertical_ratio" => sol.vm.ratio, "ndofs" => sol.ndofs,
     )
 end
 
-end # module L1_1_BareHostDispersion
+end # module L1_1
