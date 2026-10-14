@@ -5,9 +5,9 @@ Pre- and post-processing of the test defined in src/L1_1_bare_host_dispersion.jl
 
 Study, step 1: one frequency, mesh convergence.
   P1 host (Table 1 of the paper), T_ρ = 0, H = 10 m, ω = 10 rad/s;
-  p = 2 with 20, 40, 80 elements per plate wavelength, p = 3 with 20, 40
-  (finer meshes exceed ≈ 0.8M DOFs, beyond the 4 GB run limit; p = 3 reaches
-  its floor ≈ 1e-6 at 40).
+  p = 2 and p = 3 with 5, 10, 20, 40, 80 elements per plate wavelength
+  (p = 3 at 80 is ≈ 0.8M DOFs and needs more than the 4 GB run limit;
+  p = 3 reaches its floor ≈ 1e-6 at 40).
 
 Acceptance (test matrix §0.3, type D):
   - p = 2: observed rate of each error on the two finest meshes ≥ 2(p − 1) − 0.3
@@ -17,7 +17,8 @@ Acceptance (test matrix §0.3, type D):
 Outputs (relative to the repository root):
   data/sims/L1-1/      one DrWatson record per case (git commit, patch, HydroElasticFEM pin)
   data/exp_pro/L1-1/   errors.csv, checks.csv
-  plots/L1-1/          convergence figure (.pdf, .png) and table (.tex)
+  plots/L1-1/          one convergence figure per order (.pdf, .png; dashed:
+                       theoretical rate 2(p − 1)) and table (.tex)
 
 Run:
   julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl            # full study
@@ -42,8 +43,7 @@ const REPO = normpath(joinpath(@__DIR__, "..", ".."))
 "Cases of the study (`smoke = true`: one coarse case, used by the test suite)."
 function cases(; smoke::Bool=false)
     smoke && return [L1_1_Params(elements_per_wavelength=20, order=2, half_window=3.0)]
-    return [[L1_1_Params(elements_per_wavelength=n, order=2) for n in (20, 40, 80)];
-            [L1_1_Params(elements_per_wavelength=n, order=3) for n in (20, 40)]]
+    return [L1_1_Params(elements_per_wavelength=n, order=p) for p in (2, 3) for n in (5, 10, 20, 40, 80)]
 end
 
 # ─── 2. Simulation records (DrWatson) ───────────────────────────────────────
@@ -123,25 +123,33 @@ end
 
 # ─── 4. Figures and tables ──────────────────────────────────────────────────
 
+"""
+One figure per polynomial order: the errors of all quantities against the
+mesh size, with the theoretical rate 2(p − 1) (dashed) from the largest
+error on the coarsest mesh.
+"""
 function plot_convergence(df::DataFrame, dir::AbstractString)
     theme = Theme(fontsize=12, palette=(color=[:black, :royalblue, :firebrick, :forestgreen],),
                   Axis=(xgridvisible=false, ygridvisible=false))
+    mkpath(dir)
     with_theme(theme) do
-        orders = sort(unique(df.order))
-        fig = Figure(size=(380 * length(orders) + 60, 320))
-        for (j, p) in enumerate(orders)
+        for p in sort(unique(df.order))
             g = sort(filter(r -> r.order == p, df), :elements_per_wavelength)
-            ax = Axis(fig[1, j]; xscale=log10, yscale=log10, xlabel="elements per wavelength",
-                      ylabel=j == 1 ? "relative error" : "", title="p = $(p)",
-                      xticks=(g.elements_per_wavelength, string.(g.elements_per_wavelength)))
+            n = g.elements_per_wavelength
+            fig = Figure(size=(420, 340))
+            ax = Axis(fig[1, 1]; xscale=log10, yscale=log10, xlabel="elements per wavelength",
+                      ylabel="relative error", title="p = $(p)", xticks=(n, string.(n)))
             for (col, label) in ERROR_COLUMNS
-                scatterlines!(ax, g.elements_per_wavelength, g[!, col]; label=label)
+                scatterlines!(ax, n, g[!, col]; label=label)
             end
-            j == length(orders) && axislegend(ax; position=:lb, framevisible=false)
+            rate = 2(p - 1)
+            e0 = maximum(g[1, col] for (col, _) in ERROR_COLUMNS)
+            lines!(ax, n, e0 .* (n[1] ./ n) .^ rate; color=:gray40, linestyle=:dash,
+                   label=L"\mathcal{O}(h^{%$rate})")
+            axislegend(ax; position=:lb, framevisible=false)
+            save(joinpath(dir, "convergence_single_frequency_p$(p).pdf"), fig)
+            save(joinpath(dir, "convergence_single_frequency_p$(p).png"), fig; px_per_unit=300 / 96)
         end
-        mkpath(dir)
-        save(joinpath(dir, "convergence_single_frequency.pdf"), fig)
-        save(joinpath(dir, "convergence_single_frequency.png"), fig; px_per_unit=300 / 96)
     end
 end
 

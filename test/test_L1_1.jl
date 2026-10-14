@@ -56,7 +56,7 @@ end
         @test size(out.errors, 1) == 1
         @test out.errors.err_k[1] < 1e-2                  # P2, 20 el./λ_p: ≈ 1.5e-3
         @test isfile(joinpath(tmp, "data", "exp_pro", "L1-1", "checks.csv"))
-        @test isfile(joinpath(tmp, "plots", "L1-1", "convergence_single_frequency.pdf"))
+        @test isfile(joinpath(tmp, "plots", "L1-1", "convergence_single_frequency_p2.pdf"))
         @test length(readdir(joinpath(tmp, "data", "sims", "L1-1"))) == 1
     end
 end
