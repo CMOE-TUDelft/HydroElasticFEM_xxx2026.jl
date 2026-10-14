@@ -18,7 +18,8 @@ module HydroElasticFEM_xxx2026
 
 include("references.jl")
 include("L1_1_bare_host_dispersion.jl")
+include("L1_2_flux_normalisation.jl")       # uses the L1-1 problem
 
-export References, L1_1
+export References, L1_1, L1_2
 
 end
