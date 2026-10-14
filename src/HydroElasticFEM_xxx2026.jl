@@ -84,10 +84,12 @@ include("common/fe_builders.jl")
 include("common/observables.jl")
 
 # Computational bodies (one module per test)
+include("L1_1_bare_host_dispersion.jl")
 include("L1_2_flux_normalisation.jl")
 include("L1_3_single_line_resonator.jl")
 
 # Case definitions, post-processing and registration (one script per test)
+include("../scripts/L1-configA-vertical/L1-1-bare-host-dispersion.jl")
 include("../scripts/L1-configA-vertical/L1-2-flux-normalisation.jl")
 include("../scripts/L1-configA-vertical/L1-3-single-line-resonator.jl")
 

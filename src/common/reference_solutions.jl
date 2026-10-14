@@ -18,7 +18,7 @@ using Roots: find_zero, Bisection
 
 using ..ParameterSets: HostSpec, ResonatorSpec, natural_frequency
 
-export added_mass, D0, dD0, k_open, k0, host_roots
+export added_mass, D0, dD0, k_open, k0, host_roots, kappa1
 export green_1d, green_1d_integral, green_1d_patch, green_2d, green_2d_integral
 export inv_alpha, alpha, gamma_r, gamma_d, energy_flux
 export lattice_sum_1d, lattice_sum_1d_modal, bloch_residual_1d, bloch_roots_1d
@@ -124,6 +124,18 @@ function _imaginary_roots(h::HostSpec, ω::Real, n::Int)
         j += 1
     end
     return im .* roots[1:n]
+end
+
+"""
+    kappa1(h, ω)
+
+Decay rate κ₁ of the slowest fluid evanescent mode, e^{−κ₁|x|} (first purely
+imaginary root of the lossless host). 1/κ₁ approaches 2H/π for ω²H/g ≫ 1 and
+sets how far sources and scatterers must be from the domain ends.
+"""
+function kappa1(h::HostSpec, ω::Real)
+    hl = _lossless(h) ? h : HostSpec(h; τ=0.0, τ_b=0.0)
+    return imag(only(_imaginary_roots(hl, ω, 1)))
 end
 
 function _newton(F, dF, z; tol=1e-14, maxiter=100)

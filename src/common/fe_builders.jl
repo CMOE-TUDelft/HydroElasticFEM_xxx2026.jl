@@ -16,6 +16,14 @@ response G_b(x − x_s) is exact for |x − x_s| ≥ b/2 (`References.green_1d_p
 
     x = 0 ──── sponge ──── buffer ──── window ──── buffer ──── sponge ──── x = L
 
+The sponges damp propagating waves only. The slowest fluid evanescent mode,
+e^{−κ₁|x|} with 1/κ₁ ≈ 2H/π, carries no flux and is reflected by the sponge
+edge and the end walls; its reflection reaches a source or scatterer at
+distance d from the sponge with relative size ∝ e^{−2κ₁d}. The default buffer
+therefore keeps every source and resonator at least `gap_decays`/κ₁ from the
+sponges (at least one plate wavelength): 5/κ₁ gives e^{−10} ≈ 5e-5 times the
+weight of that mode (≈ 1 % of the propagating one at ω = 10 for P1).
+
 Positions passed to the builder (source, resonators) are measured from the
 start of the window. HydroElasticFEM uses the same time factor as the paper,
 exp(−iωt) (damping enters as −iωC, radiation as ∂ₙϕ = ikϕ).
@@ -32,9 +40,9 @@ using HydroElasticFEM: map_vertical_GP_for_const_dep
 
 using Roots: find_zero, Bisection
 using ..ParameterSets: HostSpec, ResonatorSpec
-using ..References: k0
+using ..References: k0, kappa1
 
-export MeshSpec, SpongeSpec, ConfigALayout, configA_channel, solve_configA, ladder_mesh
+export MeshSpec, SpongeSpec, ConfigALayout, configA_channel, solve_configA, ladder_mesh, graded_mesh
 
 """
 Discretisation: `elements_per_wavelength` along the plate (relative to the
@@ -64,6 +72,26 @@ function ladder_mesh(h::HostSpec, ω::Real, level::Integer; order::Int=2, base::
     ratio = h.H / n <= h_top ? 1.0 :
             find_zero(r -> h.H * (r - 1) / (r^n - 1) - h_top, (1.0 + 1e-12, 10.0), Bisection())
     return MeshSpec(elements_per_wavelength=n, ny=n, vertical_ratio=ratio, order=order)
+end
+
+"""
+    graded_mesh(h, ω, elements_per_wavelength; order=2, top_fraction=0.5, max_ratio=1.2)
+
+`elements_per_wavelength` elements per plate wavelength λ_p along the plate;
+vertically, a geometric progression whose top cell is `top_fraction` times the
+horizontal element size and whose ratio does not exceed `max_ratio`. Halving
+the horizontal size halves the top cell and adds ≈ log 2/log(max_ratio)
+layers, so the vertical cost grows logarithmically rather than linearly.
+"""
+function graded_mesh(h::HostSpec, ω::Real, elements_per_wavelength::Integer;
+                     order::Int=2, top_fraction::Real=0.5, max_ratio::Real=1.2)
+    h_top = top_fraction * 2π / k0(h, ω) / elements_per_wavelength
+    h.H <= h_top && return MeshSpec(elements_per_wavelength=elements_per_wavelength, ny=1,
+                                    vertical_ratio=1.0, order=order)
+    ny = ceil(Int, log(1 + h.H * (max_ratio - 1) / h_top) / log(max_ratio))
+    ratio = h.H / ny <= h_top ? 1.0 :
+            find_zero(r -> h.H * (r - 1) / (r^ny - 1) - h_top, (1.0 + 1e-12, max_ratio + 1e-9), Bisection())
+    return MeshSpec(elements_per_wavelength=elements_per_wavelength, ny=ny, vertical_ratio=ratio, order=order)
 end
 
 """
@@ -107,7 +135,7 @@ end
 
 """
     configA_channel(h, ω; window_length, resonators=ResonatorSpec[], resonator_xs=Float64[],
-                    source_x=nothing, F=1.0, source_elements=2, gap=nothing,
+                    source_x=nothing, F=1.0, source_elements=2, gap=nothing, gap_decays=5.0,
                     mesh=MeshSpec(), sponge=SpongeSpec())
 
 Build the configuration-A vertical-section problem at frequency `ω`.
@@ -116,8 +144,10 @@ centre is snapped to the nearest mesh node. `snap_resonators` moves each
 resonator to the nearest mesh node (`:node`) or element midpoint
 (`:midelement`); `:none` keeps the given positions. The geometry and mesh
 are sized with the plate wavelength at `design_ω` (default `ω`), so that a
-frequency sweep at fixed `design_ω` uses one domain and one mesh. `gap` is the buffer between
-sponge and window (default one plate wavelength).
+frequency sweep at fixed `design_ω` uses one domain and one mesh. `gap` is
+the buffer between sponge and window; by default it is the smallest buffer
+that keeps every source and resonator `gap_decays`/κ₁ (at `design_ω`) from
+both sponges, and at least one plate wavelength.
 Returns `(problem, layout)`.
 """
 function configA_channel(h::HostSpec, ω::Real; window_length::Real,
@@ -126,7 +156,7 @@ function configA_channel(h::HostSpec, ω::Real; window_length::Real,
                          source_x::Union{Nothing,Real}=nothing, F::Number=1.0,
                          source_elements::Int=2, snap_resonators::Symbol=:none,
                          design_ω::Real=ω,
-                         gap::Union{Nothing,Real}=nothing,
+                         gap::Union{Nothing,Real}=nothing, gap_decays::Real=5.0,
                          mesh::MeshSpec=MeshSpec(), sponge::SpongeSpec=SpongeSpec())
     h.C_ρ > 0 || throw(ArgumentError("configuration-A sponges act on bending: C_ρ must be positive"))
     h.τ == h.τ_b || throw(ArgumentError("HydroElasticFEM uses one Rayleigh τ for tension and bending (τ = τ_b)"))
@@ -135,7 +165,13 @@ function configA_channel(h::HostSpec, ω::Real; window_length::Real,
 
     λ_p = 2π / k0(h, design_ω)
     Ls = sponge.wavelengths * λ_p
-    buffer = isnothing(gap) ? λ_p : gap
+    buffer = if isnothing(gap)
+        xs_all = [collect(Float64, resonator_xs); isnothing(source_x) ? Float64[] : [Float64(source_x)]]
+        d_window = minimum(x -> min(x, window_length - x), xs_all)
+        max(λ_p, gap_decays / kappa1(h, design_ω) - d_window)
+    else
+        gap
+    end
     x_w = Ls + buffer
     L = 2 * (Ls + buffer) + window_length
     nx = ceil(Int, L * mesh.elements_per_wavelength / λ_p)

@@ -9,7 +9,7 @@ using LinearAlgebra
 
 export sample_plate, relative_error, observed_rates, richardson_extrapolate
 export fit_waves, symmetric_scattering, patch_average, secant_root, half_power_width
-export self_convergence
+export self_convergence, incoming_field
 
 "Plate deflection `ηh` sampled at `xs` on the free-surface line z = `z`."
 sample_plate(ηh, xs::AbstractVector{<:Real}; z::Real=0.0) =
@@ -75,7 +75,9 @@ wavenumber is fitted too (residual scanned on a grid within ±5 % of
 k₀ = `roots[1]`, then golden-section search around the best grid point; the
 residual has side minima on short windows), so that the discrete dispersion error does not leak into
 the phases of A±; otherwise `k` is used as given.
-Returns `(Aplus, Aminus, k, residual)` with residual = ‖fit − η‖/‖η‖.
+Returns `(Aplus, Aminus, k, residual)` with residual = ‖fit − η‖/‖η‖, and
+the evanescent part (`ks`, coefficients `cplus` of e^{ikₙ(x−x_a)} and `cminus`
+of e^{ikₙ(x_b−x)}, window `xa`, `xb`, `x_ref`) used by `incoming_field`.
 """
 function fit_waves(xs::AbstractVector{<:Real}, ηs::AbstractVector, roots::AbstractVector;
                    x_ref::Real=0.0, n_modes::Int=6, k::Union{Nothing,Real}=nothing)
@@ -98,7 +100,8 @@ function fit_waves(xs::AbstractVector{<:Real}, ηs::AbstractVector, roots::Abstr
         k = _golden_min(kk -> last(solve(kk)), grid[max(i - 1, 1)], grid[min(i + 1, end)]; tol=1e-13k0)
     end
     c, res = solve(k)
-    return (Aplus=c[1], Aminus=c[2], k=k, residual=res)
+    return (Aplus=c[1], Aminus=c[2], k=k, residual=res, x_ref=x_ref, xa=xa, xb=xb,
+            ks=ks, cplus=c[3:2:end], cminus=c[4:2:end])
 end
 
 "Minimiser of a unimodal `f` on [a, b] by golden-section search."
@@ -122,6 +125,25 @@ end
 
 fit_waves(ηh, roots::AbstractVector, xa::Real, xb::Real; npts::Int=400, kwargs...) =
     (xs = range(xa, xb; length=npts); fit_waves(xs, sample_plate(ηh, xs), roots; kwargs...))
+
+"""
+    incoming_field(left, right, x)
+
+Field entering a transparent region (e.g. a source patch, no scatterer)
+from the domain ends, evaluated at `x` between the two fitted windows
+`left` (x < region) and `right` (x > region) of `fit_waves`: the propagating
+waves travelling towards the region (sponge reflections) plus the evanescent
+modes decaying away from the far ends of the windows (reflections of the
+evanescent near field at the sponges and walls). Subtracting it from the FE
+field leaves the response to the source alone in an unbounded host.
+"""
+function incoming_field(left, right, x::Real)
+    z = left.Aplus * exp(im * left.k * (x - left.x_ref)) +
+        right.Aminus * exp(-im * right.k * (x - right.x_ref))
+    z += sum(left.cplus .* exp.(im .* left.ks .* (x - left.xa)); init=zero(ComplexF64))
+    z += sum(right.cminus .* exp.(im .* right.ks .* (right.xb - x)); init=zero(ComplexF64))
+    return z
+end
 
 """
     symmetric_scattering(up, down)

@@ -40,7 +40,9 @@ using LinearAlgebra
     c = configA_vs_reference(h, 10.0, ResonatorSpec[], Float64[])
     @test c.field_error < 2e-2                  # P2, 24 el/λ_p: ≈ 1 % (study in fe_builders.jl)
     lay = c.sol.layout
-    @test lay.window[1] ≈ lay.sponge_length + lay.λ_p
+    # buffer: the source is ≥ 5/κ₁ from the sponges (and the buffer ≥ λ_p)
+    @test lay.window[1] - lay.sponge_length >= lay.λ_p - 1e-12
+    @test lay.source_x - lay.sponge_length >= 5 / kappa1(h, 10.0) - lay.element_size
     @test isapprox(lay.source_x / lay.element_size, round(lay.source_x / lay.element_size); atol=1e-9)
 end
 
