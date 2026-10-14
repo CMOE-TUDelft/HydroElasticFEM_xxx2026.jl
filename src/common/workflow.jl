@@ -160,6 +160,22 @@ function add_check!(checks::Vector{AcceptanceCheck}, test_id, name; kwargs...)
     return check
 end
 
+"""
+    add_rate_check!(checks, test_id, name; rate, theoretical, slack=0.3)
+
+Convergence-rate criterion of the matrix (§0.3): observed `rate` ≥
+`theoretical − slack`. Stored as an `AcceptanceCheck` with value
+min(rate, theoretical), so that rates above the theory pass.
+"""
+function add_rate_check!(checks::Vector{AcceptanceCheck}, test_id, name;
+                         rate::Real, theoretical::Real, slack::Real=0.3)
+    check = AcceptanceCheck(test_id, name, "D", rate, theoretical,
+                            max(theoretical - rate, 0.0) / theoretical, slack / theoretical,
+                            rate >= theoretical - slack)
+    push!(checks, check)
+    return check
+end
+
 "Write the checks of `test_id` to `data/exp_pro/<test-id>/checks.csv`."
 function write_checks(test_id::AbstractString, checks::Vector{AcceptanceCheck})
     path = exp_pro_path(test_id, "checks.csv")
@@ -224,19 +240,51 @@ end
 # ─── Test registry ──────────────────────────────────────────────────────────
 
 const TEST_REGISTRY = Dict{String,Function}()
+const CASE_REGISTRY = Dict{String,Tuple{Function,Function}}()
 const _TEST_ID = r"^(L[0-4]|S3)-([0-9]+)$"
 
 """
-    register_test(test_id, entry_point)
+    register_test(test_id, entry_point; cases=nothing, body=nothing)
 
 Called by each `scripts/*/<id>-<name>.jl` file to make its entry point
 `entry_point(; force, make_plots, save_csv, verbose, vtk_output, test_suit)`
-available through `run_tests`.
+available through `run_tests`. Passing the case list `cases(; test_suit)` and
+the computational body `body(case)::Dict` also makes the test available to
+`run_case_range` (heavy runs split over several processes).
 """
-function register_test(test_id::AbstractString, entry_point::Function)
+function register_test(test_id::AbstractString, entry_point::Function;
+                       cases::Union{Nothing,Function}=nothing, body::Union{Nothing,Function}=nothing)
     occursin(_TEST_ID, test_id) || throw(ArgumentError("Invalid test id $(test_id); expected e.g. L1-5 or S3-2"))
     TEST_REGISTRY[String(test_id)] = entry_point
+    if !isnothing(cases) && !isnothing(body)
+        CASE_REGISTRY[String(test_id)] = (cases, body)
+    end
     return nothing
+end
+
+"""
+    run_case_range(test_id, range=nothing; force=false, verbose=true)
+
+Compute (or load) the simulation records of cases `range` of `test_id`
+without post-processing; `nothing` lists the cases. Used to split heavy
+tests over several resource-limited processes
+(`scripts/run_case_range.jl`); `run_tests` then only loads the records.
+"""
+function run_case_range(test_id::AbstractString, range=nothing; force::Bool=false, verbose::Bool=true)
+    haskey(CASE_REGISTRY, test_id) || error("Test $(test_id) did not register its cases and body")
+    cases, body = CASE_REGISTRY[test_id]
+    all_cases = cases()
+    if isnothing(range)
+        foreach(((i, c),) -> println(i, "\t", savename(c)), enumerate(all_cases))
+        return length(all_cases)
+    end
+    for i in range
+        verbose && println("[$(test_id)] case $(i)/$(length(all_cases)): ", savename(all_cases[i]))
+        stats = @timed produce_or_load_case(body, all_cases[i], test_id; force=force)
+        verbose && @printf("    %.1f s\n", stats.time)
+        flush(stdout)
+    end
+    return length(range)
 end
 
 function _test_sort_key(test_id::AbstractString)

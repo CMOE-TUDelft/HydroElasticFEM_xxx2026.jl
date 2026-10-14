@@ -66,3 +66,22 @@ end
     # guards against the plate-side dashpot sign error fixed in HydroElasticFEM#75
     @test reversed.field_error > 5paper.field_error
 end
+
+@testset "Configuration A: mesh ladder and resonator snapping" begin
+    h = P1().host
+    m = ladder_mesh(h, 10.0, 1)
+    @test m.elements_per_wavelength == 16 && m.ny == 16
+    r = m.vertical_ratio
+    @test h.H * (r - 1) / (r^m.ny - 1) ≈ 2π / k0(h, 10.0) / 32      # top cell = half the element size
+    @test ladder_mesh(P1().host, 10.0, 0; order=3).order == 3
+    frac(x) = abs(x - round(x))
+    for (snap, expected) in ((:node, 0.0), (:midelement, 0.5))
+        _, lay = configA_channel(h, 10.0; window_length=5.0, source_x=0.5,
+                                 resonators=[P1().resonator], resonator_xs=[2.123], snap_resonators=snap)
+        @test frac(only(lay.resonator_xs) / lay.element_size) ≈ expected atol = 1e-9
+    end
+    # the domain is sized at design_ω, independently of ω
+    _, l1 = configA_channel(h, 9.5; window_length=5.0, source_x=0.5, design_ω=10.0)
+    _, l2 = configA_channel(h, 10.5; window_length=5.0, source_x=0.5, design_ω=10.0)
+    @test l1.L == l2.L && l1.nx == l2.nx
+end

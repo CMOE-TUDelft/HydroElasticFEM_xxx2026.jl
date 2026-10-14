@@ -83,10 +83,18 @@ include("common/reference_solutions.jl")
 include("common/fe_builders.jl")
 include("common/observables.jl")
 
+# Computational bodies (one module per test)
+include("L1_2_flux_normalisation.jl")
+include("L1_3_single_line_resonator.jl")
+
+# Case definitions, post-processing and registration (one script per test)
+include("../scripts/L1-configA-vertical/L1-2-flux-normalisation.jl")
+include("../scripts/L1-configA-vertical/L1-3-single-line-resonator.jl")
+
 export ParameterSets, References, FEBuilders, Observables
-export run_tests, list_tests
+export run_tests, list_tests, run_case_range
 export output_root, with_output_root, sims_path, exp_pro_path, plots_path
 export provenance, produce_or_load_case
-export AcceptanceCheck, add_check!, write_checks, save_figure, write_latex_table
+export AcceptanceCheck, add_check!, add_rate_check!, write_checks, save_figure, write_latex_table
 
 end

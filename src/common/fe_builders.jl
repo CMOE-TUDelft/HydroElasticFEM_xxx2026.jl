@@ -30,10 +30,11 @@ import HydroElasticFEM.Simulation as S
 import HydroElasticFEM.ParameterHandler as PH
 using HydroElasticFEM: map_vertical_GP_for_const_dep
 
+using Roots: find_zero, Bisection
 using ..ParameterSets: HostSpec, ResonatorSpec
 using ..References: k0
 
-export MeshSpec, SpongeSpec, ConfigALayout, configA_channel, solve_configA
+export MeshSpec, SpongeSpec, ConfigALayout, configA_channel, solve_configA, ladder_mesh
 
 """
 Discretisation: `elements_per_wavelength` along the plate (relative to the
@@ -47,6 +48,22 @@ polynomial `order` for ϕ and η, C/DG penalty `γ`.
     vertical_ratio::Float64 = 1.15
     order::Int = 2
     γ::Float64 = 6.0
+end
+
+"""
+    ladder_mesh(h, ω, level; order=2, base=8)
+
+Level `level` (0, 1, 2, …) of the mesh ladder of the test matrix (§0.3):
+`base·2^level` elements per plate wavelength λ_p and `base·2^level` vertical
+elements, graded so that the top cell is half the horizontal element size
+(k₀h_z ≤ 0.2 from level 1 on); uniform when H/ny is already that fine.
+"""
+function ladder_mesh(h::HostSpec, ω::Real, level::Integer; order::Int=2, base::Int=8)
+    n = base * 2^level
+    h_top = 2π / k0(h, ω) / n / 2
+    ratio = h.H / n <= h_top ? 1.0 :
+            find_zero(r -> h.H * (r - 1) / (r^n - 1) - h_top, (1.0 + 1e-12, 10.0), Bisection())
+    return MeshSpec(elements_per_wavelength=n, ny=n, vertical_ratio=ratio, order=order)
 end
 
 """
@@ -95,7 +112,11 @@ end
 
 Build the configuration-A vertical-section problem at frequency `ω`.
 `resonator_xs` and `source_x` are offsets from the window start; the source
-centre is snapped to the nearest mesh node. `gap` is the buffer between
+centre is snapped to the nearest mesh node. `snap_resonators` moves each
+resonator to the nearest mesh node (`:node`) or element midpoint
+(`:midelement`); `:none` keeps the given positions. The geometry and mesh
+are sized with the plate wavelength at `design_ω` (default `ω`), so that a
+frequency sweep at fixed `design_ω` uses one domain and one mesh. `gap` is the buffer between
 sponge and window (default one plate wavelength).
 Returns `(problem, layout)`.
 """
@@ -103,7 +124,8 @@ function configA_channel(h::HostSpec, ω::Real; window_length::Real,
                          resonators::AbstractVector{ResonatorSpec}=ResonatorSpec[],
                          resonator_xs::AbstractVector{<:Real}=Float64[],
                          source_x::Union{Nothing,Real}=nothing, F::Number=1.0,
-                         source_elements::Int=2,
+                         source_elements::Int=2, snap_resonators::Symbol=:none,
+                         design_ω::Real=ω,
                          gap::Union{Nothing,Real}=nothing,
                          mesh::MeshSpec=MeshSpec(), sponge::SpongeSpec=SpongeSpec())
     h.C_ρ > 0 || throw(ArgumentError("configuration-A sponges act on bending: C_ρ must be positive"))
@@ -111,7 +133,7 @@ function configA_channel(h::HostSpec, ω::Real; window_length::Real,
     length(resonators) == length(resonator_xs) || throw(DimensionMismatch("one position per resonator"))
     isnothing(source_x) && isempty(resonators) && throw(ArgumentError("nothing drives the problem"))
 
-    λ_p = 2π / k0(h, ω)
+    λ_p = 2π / k0(h, design_ω)
     Ls = sponge.wavelengths * λ_p
     buffer = isnothing(gap) ? λ_p : gap
     x_w = Ls + buffer
@@ -119,6 +141,13 @@ function configA_channel(h::HostSpec, ω::Real; window_length::Real,
     nx = ceil(Int, L * mesh.elements_per_wavelength / λ_p)
     he = L / nx
     xr = collect(Float64, resonator_xs) .+ x_w
+    if snap_resonators == :node
+        xr = round.(xr ./ he) .* he
+    elseif snap_resonators == :midelement
+        xr = (floor.(xr ./ he) .+ 0.5) .* he
+    elseif snap_resonators != :none
+        throw(ArgumentError("snap_resonators must be :none, :node or :midelement"))
+    end
     xs_src = isnothing(source_x) ? nothing : round((x_w + source_x) / he) * he
     b = source_elements * he
     layout = ConfigALayout(L, h.H, λ_p, Ls, (x_w, x_w + window_length), xs_src, b, xr, nx, he)

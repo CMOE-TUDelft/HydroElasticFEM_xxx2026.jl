@@ -34,7 +34,15 @@ run_tests("L1")                   # one level
 run_tests("all"; test_suit=true)  # warm-up cases only (smoke test)
 ```
 
-Run heavy cases with `julia --project -O1 -t <n>`. HydroElasticFEM.jl is
+Run heavy cases with `julia --project -O1 -t <n>`. Tests that register their
+case list can be split over several (resource-limited) processes; afterwards
+`run_tests(id)` only loads the records and post-processes them:
+
+```bash
+julia --project -O1 scripts/run_case_range.jl L1-3          # list the cases
+julia --project -O1 scripts/run_case_range.jl L1-3 1:6      # compute cases 1–6
+```
+ HydroElasticFEM.jl is
 tracked from its `main` branch (`Pkg.add(url=..., rev="main")`); every
 simulation record stores the Manifest pin (`hefem_rev`, `hefem_tree`).
 To work against a local checkout instead, `Pkg.develop(path="../HydroElasticFEM.jl")`.
