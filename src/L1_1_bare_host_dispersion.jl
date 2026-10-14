@@ -125,7 +125,8 @@ Parameters of one L1-1 case. Lengths of the layout are in plate wavelengths
 
     # ── Fixed: discretisation ─────────────────────────────────────────────────
     top_fraction::Float64 = 0.5           # top vertical cell / horizontal size
-    max_ratio::Float64 = 1.2              # maximum vertical growth ratio
+    max_ratio::Float64 = 1.2              # maximum vertical growth ratio at ratio_elements el./λ_p
+    ratio_elements::Int = 20              # max ratio − 1 scales as ratio_elements/elements_per_wavelength
     γ_penalty::Float64 = 6.0              # C/DG interior penalty of the plate
 
     # ── Fixed: post-processing ────────────────────────────────────────────────
@@ -175,14 +176,19 @@ end
 
 Number of vertical elements and growth ratio of a geometric progression
 (finest at the surface) whose top cell is `top_fraction·he` and whose ratio
-does not exceed `max_ratio`. Halving `he` adds ≈ log 2/log(max_ratio) layers.
+does not exceed r_max = 1 + (`max_ratio` − 1)·`ratio_elements`/`elements_per_wavelength`.
+Shrinking r_max − 1 with he makes every cell, down to the bottom, refine with
+the horizontal mesh: with a fixed ratio the deep cells keep their size
+(≈ H(r − 1)/r), which left a non-converging error where the wave reaches the
+bottom (P2 rate 1.25 at ω ≈ 2, kH ≈ 4).
 """
 function vertical_mesh(p::L1_1_Params, he::Real)
     h_top = p.top_fraction * he
+    rmax = 1 + (p.max_ratio - 1) * p.ratio_elements / p.elements_per_wavelength
     p.H <= h_top && return (ny=1, ratio=1.0)
-    ny = ceil(Int, log(1 + p.H * (p.max_ratio - 1) / h_top) / log(p.max_ratio))
+    ny = ceil(Int, log(1 + p.H * (rmax - 1) / h_top) / log(rmax))
     p.H / ny <= h_top && return (ny=ny, ratio=1.0)
-    ratio = find_zero(r -> p.H * (r - 1) / (r^ny - 1) - h_top, (1.0 + 1e-12, p.max_ratio + 1e-9), Bisection())
+    ratio = find_zero(r -> p.H * (r - 1) / (r^ny - 1) - h_top, (1.0 + 1e-12, rmax + 1e-9), Bisection())
     return (ny=ny, ratio=ratio)
 end
 

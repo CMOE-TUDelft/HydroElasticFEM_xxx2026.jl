@@ -41,7 +41,7 @@ end
     @test isapprox(lay.x_s / lay.he, round(lay.x_s / lay.he); atol=1e-9)   # source on a node
     vm = L1_1.vertical_mesh(p, lay.he)
     r = vm.ratio
-    @test 1 < r <= p.max_ratio
+    @test 1 < r <= 1 + (p.max_ratio - 1) * p.ratio_elements / p.elements_per_wavelength
     @test p.H * (r - 1) / (r^vm.ny - 1) ≈ p.top_fraction * lay.he          # top cell
     # variable parameters name the record, fixed ones change the hash
     @test fixed_hash(p) == fixed_hash(L1_1_Params(elements_per_wavelength=80, ω=5.0, order=3, T_ρ=9.8))

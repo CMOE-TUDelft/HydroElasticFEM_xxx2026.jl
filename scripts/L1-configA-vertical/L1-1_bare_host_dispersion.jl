@@ -5,9 +5,13 @@ Pre- and post-processing of the test defined in src/L1_1_bare_host_dispersion.jl
 
 Study, step 1 (`mesh`): one frequency, mesh convergence.
   P1 host (Table 1 of the paper), T_ρ = 0, H = 10 m, ω = 10 rad/s;
-  p = 2 and p = 3 with 5, 10, 20, 40, 80 elements per plate wavelength
-  (p = 3 at 80 is ≈ 0.8M DOFs and needs more than the 4 GB run limit;
-  p = 3 reaches its floor ≈ 1e-6 at 40). All four observables.
+  p = 2 with 5, 10, 20, 40, 80 and p = 3 with 5, 10, 20, 40 elements per
+  plate wavelength (p = 3 at 80 is ≈ 2.2M DOFs with the refined vertical
+  grading; p = 3 reaches its floor ≈ 1e-6 at 40). All four observables.
+
+Vertical mesh: the grading ratio is refined with the horizontal mesh
+(`L1_1.vertical_mesh`); with a fixed ratio the P2 rate dropped to 1.25 at
+ω ≈ 2, where the wave reaches the bottom.
 
 Study, step 2 (`sweep`): frequency sweep, far field only.
   P1 host, T_ρ ∈ {0, 9.8}, H = 10 m, ω: 30 values log-spaced in [0.3, 15]
@@ -33,8 +37,8 @@ Outputs (relative to the repository root):
 Run:
   julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl                     # step 1
   julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl --sweep             # step 2
-  julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl --sweep --cases 1:60  # compute
-        cases 1–60 of step 2 only (no post-processing), to split the sweep over several runs
+  julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl --sweep --cases 1:60,75  # compute
+        cases 1–60 and 75 of step 2 only (no post-processing), to split the sweep over several runs
   julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl --smoke             # one coarse case
   julia --project -O1 scripts/L1-configA-vertical/L1-1_bare_host_dispersion.jl --force             # recompute records
 =#
@@ -65,7 +69,8 @@ coarse case, used by the test suite.
 function cases(study::Symbol=:mesh; smoke::Bool=false)
     smoke && return [L1_1_Params(elements_per_wavelength=20, order=2, half_window=3.0)]
     study == :mesh &&
-        return [L1_1_Params(elements_per_wavelength=n, order=p) for p in (2, 3) for n in (5, 10, 20, 40, 80)]
+        return [[L1_1_Params(elements_per_wavelength=n, order=2) for n in (5, 10, 20, 40, 80)];
+                [L1_1_Params(elements_per_wavelength=n, order=3) for n in (5, 10, 20, 40)]]
     study == :sweep &&
         return [L1_1_Params(ω=ω, T_ρ=T, elements_per_wavelength=n, order=p)
                 for T in SWEEP_T for ω in SWEEP_ω for (p, ladder) in SWEEP_LADDER for n in ladder]
@@ -226,16 +231,19 @@ Bottom: observed rate on the two finest meshes, dashed at 2(p − 1).
 function plot_sweep(df::DataFrame, rates::DataFrame, dir::AbstractString)
     colors = Dict(2 => :black, 3 => :royalblue)
     styles = (:dot, :dash, :solid)
+    ωticks = [0.3, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 15.0]
+    xticks = (ωticks, [@sprintf("%.1f", ω) for ω in ωticks])
+    yticks = (10.0 .^ (-12:2:0), [L"10^{%$e}" for e in -12:2:0])   # whole decades
     theme = Theme(fontsize=12, Axis=(xgridvisible=false, ygridvisible=false))
     mkpath(dir)
     with_theme(theme) do
         for (col, label) in SWEEP_COLUMNS
             Ts = sort(unique(df.T_ρ))
-            fig = Figure(size=(380 * length(Ts) + 60, 600))
+            fig = Figure(size=(380 * length(Ts) + 180, 600))
             for (j, T) in enumerate(Ts)
-                ax = Axis(fig[1, j]; xscale=log10, yscale=log10, title=L"T_\rho = %$T",
+                ax = Axis(fig[1, j]; xscale=log10, yscale=log10, xticks=xticks, yticks=yticks, title=L"T_\rho = %$T",
                           ylabel=j == 1 ? "relative error" : "")
-                axr = Axis(fig[2, j]; xscale=log10, xlabel=L"\omega\;\mathrm{(rad/s)}",
+                axr = Axis(fig[2, j]; xscale=log10, xticks=xticks, xlabel=L"\omega\;\mathrm{(rad/s)}",
                            ylabel=j == 1 ? "observed rate" : "")
                 linkxaxes!(ax, axr)
                 for (p, ladder) in SWEEP_LADDER
@@ -248,8 +256,10 @@ function plot_sweep(df::DataFrame, rates::DataFrame, dir::AbstractString)
                                   label="p = $(p)")
                     hlines!(axr, 2(p - 1); color=colors[p], linestyle=:dash, linewidth=1)
                 end
-                j == length(Ts) && axislegend(ax; position=:rt, framevisible=false, labelsize=9)
-                j == length(Ts) && axislegend(axr; position=:rt, framevisible=false, labelsize=9)
+                if j == length(Ts)
+                    Legend(fig[1, j + 1], ax; framevisible=false, labelsize=10)
+                    Legend(fig[2, j + 1], axr; framevisible=false, labelsize=10)
+                end
             end
             Label(fig[0, :], label; fontsize=16)
             save(joinpath(dir, "sweep_$(col).pdf"), fig)
@@ -282,11 +292,11 @@ end
 Run `study` (`:mesh` or `:sweep`): compute or load every case, write the
 errors and checks to `<root>/data/exp_pro/L1-1/`, the figures (and, for
 `:mesh`, the table) to `<root>/plots/L1-1/`, and print a summary. Returns
-`(errors, checks)`. With `only` (a range of case indices), compute those
+`(errors, checks)`. With `only` (case indices), compute those
 records and return without post-processing.
 """
 function main(study::Symbol=:mesh; smoke::Bool=false, force::Bool=false, root::AbstractString=REPO,
-              only::Union{Nothing,AbstractRange}=nothing)
+              only::Union{Nothing,AbstractVector{<:Integer}}=nothing)
     cs = cases(study; smoke=smoke)
     if only !== nothing
         for (i, p) in zip(only, cs[only])
@@ -329,12 +339,12 @@ function main(study::Symbol=:mesh; smoke::Bool=false, force::Bool=false, root::A
     return (errors=df, checks=ck)
 end
 
-"Range `a:b` following `--cases` on the command line, or `nothing`."
+"Case indices following `--cases` (comma-separated indices and ranges `a:b`), or `nothing`."
 function cases_arg(args)
     i = findfirst(==("--cases"), args)
     i === nothing && return nothing
-    a, b = parse.(Int, split(args[i + 1], ":"))
-    return a:b
+    part(s) = occursin(':', s) ? range(parse.(Int, split(s, ":"))...) : [parse(Int, s)]
+    return reduce(vcat, collect.(part.(split(args[i + 1], ","))))
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
