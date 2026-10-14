@@ -43,6 +43,11 @@ a channel of depth H, with rigid walls at both ends.
   buffer keeps the source `gap_decays`/κ₁ away from the sponges (with ±4 λ_p
   and a one-wavelength buffer, the reflection left a mesh-independent error of
   9e-6 in Re G).
+- Channel length: at low ω the bending-only sponges barely absorb, and the
+  walled channel is a lossless cavity, resonant at L = nλ_p/2 (with
+  L = 22λ_p the response was 10⁴ times too large at ω = 0.3). The buffers
+  are lengthened so that L = (integer + `length_fraction`)·λ_p, midway
+  between two resonances for `length_fraction` = 1/4.
 
 ## Observables (one frequency, one mesh)
 
@@ -96,6 +101,7 @@ Parameters of one L1-1 case. Lengths of the layout are in plate wavelengths
     ω::Float64 = 10.0                     # frequency (rad/s)
     elements_per_wavelength::Int = 20     # horizontal elements per λ_p
     order::Int = 2                        # polynomial order of ϕ and η
+    T_ρ::Float64 = 0.0                    # pre-tension / ρ (m³/s²)
 
     # ── Fixed: host, set P1 of the test matrix = Table 1 of the paper ────────
     g::Float64 = 9.8                      # gravity (m/s²)
@@ -103,7 +109,6 @@ Parameters of one L1-1 case. Lengths of the layout are in plate wavelengths
     H::Float64 = 10.0                     # depth (m)
     m_ρ::Float64 = 0.01                   # plate mass / ρ (m)
     C_ρ::Float64 = 0.49                   # bending stiffness D / ρ (m⁵/s²)
-    T_ρ::Float64 = 0.0                    # pre-tension / ρ (m³/s²)
 
     # ── Fixed: forcing ────────────────────────────────────────────────────────
     F::Float64 = 1.0                      # force / ρ (m⁴/s² per unit width)
@@ -113,6 +118,7 @@ Parameters of one L1-1 case. Lengths of the layout are in plate wavelengths
     half_window::Float64 = 4.0            # window = source ± half_window
     probe_offset::Float64 = 1.0           # probes start this far from the source
     gap_decays::Float64 = 5.0             # source ≥ gap_decays/κ₁ from the sponges
+    length_fraction::Float64 = 0.25       # L/λ_p ∈ ℤ + length_fraction (off the cavity resonances)
     sponge_wavelengths::Float64 = 6.0     # sponge length
     sponge_strength::Float64 = 3.0        # maximum loss factor s
     sponge_power::Int = 2                 # ramp s ∝ ξ^power
@@ -128,7 +134,7 @@ Parameters of one L1-1 case. Lengths of the layout are in plate wavelengths
 end
 
 "Fields of `L1_1_Params` varied by the L1-1 study (they name the records)."
-const VARIABLE = (:ω, :elements_per_wavelength, :order)
+const VARIABLE = (:ω, :T_ρ, :elements_per_wavelength, :order)
 
 "Short hash of the fixed parameters, appended to the record name."
 function fixed_hash(p::L1_1_Params)
@@ -146,7 +152,8 @@ host(p::L1_1_Params) = HostSpec(g=p.g, ρ=p.ρ, H=p.H, m_ρ=p.m_ρ, C_ρ=p.C_ρ,
 
 Absolute geometry: channel length `L`, sponge length `Ls`, buffer, window,
 source centre `x_s` (on a mesh node), patch width `b`, number of elements `nx`
-and element size `he`.
+and element size `he`. The buffer is the larger of λ_p and the evanescent
+gap, lengthened until L/λ_p − `length_fraction` is an integer.
 """
 function layout(p::L1_1_Params)
     h = host(p)
@@ -154,7 +161,8 @@ function layout(p::L1_1_Params)
     Ls = p.sponge_wavelengths * λ
     half = p.half_window * λ
     buffer = max(λ, p.gap_decays / kappa1(h, p.ω) - half)   # source ≥ gap_decays/κ₁ from the sponges
-    L = 2 * (Ls + buffer + half)
+    L = λ * (ceil(2 * (Ls + buffer + half) / λ - p.length_fraction) + p.length_fraction)
+    buffer = L / 2 - Ls - half
     nx = ceil(Int, L * p.elements_per_wavelength / λ)
     he = L / nx
     x_s = round((L / 2) / he) * he
@@ -244,10 +252,13 @@ function fit_waves(xs::AbstractVector{<:Real}, ηs::AbstractVector, roots::Abstr
                    x_ref::Real, n_modes::Int, k::Union{Nothing,Real}=nothing)
     xa, xb = extrema(xs)
     ks = roots[2:(n_modes + 1)]
+    # decaying mode e^{ikₙd}, d ≥ 0; flushed to zero before it turns subnormal
+    # (on long windows at low ω; subnormals make the BLAS return NaN)
+    decay(kn, d) = imag(kn) * d > 700 ? zero(ComplexF64) : exp(im * kn * d)
     function lsq(kk)
         cols = [exp.(im * kk .* (xs .- x_ref)), exp.(-im * kk .* (xs .- x_ref))]
         for kn in ks
-            push!(cols, exp.(im * kn .* (xs .- xa)), exp.(im * kn .* (xb .- xs)))
+            push!(cols, decay.(kn, xs .- xa), decay.(kn, xb .- xs))
         end
         M = reduce(hcat, cols)
         c = M \ ηs

@@ -36,14 +36,16 @@ end
     h = L1_1.host(p)
     @test lay.x_s - lay.Ls >= p.gap_decays / kappa1(h, p.ω) - 1e-9      # evanescent buffer
     @test lay.buffer >= lay.λ - 1e-12
+    n = lay.L / lay.λ - p.length_fraction                                  # off the cavity resonances
+    @test isapprox(n, round(n); atol=1e-9)
     @test isapprox(lay.x_s / lay.he, round(lay.x_s / lay.he); atol=1e-9)   # source on a node
     vm = L1_1.vertical_mesh(p, lay.he)
     r = vm.ratio
     @test 1 < r <= p.max_ratio
     @test p.H * (r - 1) / (r^vm.ny - 1) ≈ p.top_fraction * lay.he          # top cell
     # variable parameters name the record, fixed ones change the hash
-    @test fixed_hash(p) == fixed_hash(L1_1_Params(elements_per_wavelength=80, ω=5.0, order=3))
-    @test fixed_hash(p) != fixed_hash(L1_1_Params(elements_per_wavelength=40, T_ρ=9.8))
+    @test fixed_hash(p) == fixed_hash(L1_1_Params(elements_per_wavelength=80, ω=5.0, order=3, T_ρ=9.8))
+    @test fixed_hash(p) != fixed_hash(L1_1_Params(elements_per_wavelength=40, H=20.0))
 end
 
 module L1_1_ScriptSandbox
