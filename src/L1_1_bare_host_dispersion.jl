@@ -88,7 +88,7 @@ import HydroElasticFEM.Simulation as S
 import HydroElasticFEM.ParameterHandler as PH
 using HydroElasticFEM: map_vertical_GP_for_const_dep
 
-using ..References: HostSpec, k0, kappa1, host_roots, gamma_r, green_1d_patch
+using ..References: HostSpec, ResonatorSpec, k0, kappa1, host_roots, gamma_r, green_1d_patch
 
 export L1_1_Params, VARIABLE, fixed_hash, run_case
 
@@ -143,8 +143,8 @@ function fixed_hash(p::L1_1_Params)
     return string(hash(fixed); base=16, pad=16)[1:8]
 end
 
-"Bare host of the case, in the notation of `References`."
-host(p::L1_1_Params) = HostSpec(g=p.g, ρ=p.ρ, H=p.H, m_ρ=p.m_ρ, C_ρ=p.C_ρ, T_ρ=p.T_ρ)
+"Bare host of the case, in the notation of `References` (any parameter struct with the host fields)."
+host(p) = HostSpec(g=p.g, ρ=p.ρ, H=p.H, m_ρ=p.m_ρ, C_ρ=p.C_ρ, T_ρ=p.T_ρ)
 
 # ─── Geometry and mesh ──────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ the horizontal mesh: with a fixed ratio the deep cells keep their size
 (≈ H(r − 1)/r), which left a non-converging error where the wave reaches the
 bottom (P2 rate 1.25 at ω ≈ 2, kH ≈ 4).
 """
-function vertical_mesh(p::L1_1_Params, he::Real)
+function vertical_mesh(p, he::Real)
     h_top = p.top_fraction * he
     rmax = 1 + (p.max_ratio - 1) * p.ratio_elements / p.elements_per_wavelength
     p.H <= h_top && return (ny=1, ratio=1.0)
@@ -193,7 +193,7 @@ function vertical_mesh(p::L1_1_Params, he::Real)
 end
 
 "Loss factor s(x) of the plate sponges (0 outside them)."
-function sponge_loss(p::L1_1_Params, x::Real, L::Real, Ls::Real)
+function sponge_loss(p, x::Real, L::Real, Ls::Real)
     ξ = max(Ls - x, x - (L - Ls), 0.0) / Ls
     return p.sponge_strength * ξ^p.sponge_power
 end
@@ -201,21 +201,30 @@ end
 # ─── FE problem (HydroElasticFEM.jl) ────────────────────────────────────────
 
 """
-    solve(p)
+    solve(p; ω=p.ω, lay=layout(p), resonators=ResonatorSpec[], x_res=Float64[])
 
 Build and solve the frequency-domain problem with HydroElasticFEM: potential
 flow in the channel (`PotentialFlow`), the plate as a tensioned
 Euler–Bernoulli beam with C/DG bending (`TensionedEulerBernoulliBeam`, sponge
-through a complex EI(x)), and the patch load through `rhs_fn`. Returns the
-plate deflection `ηh`, the layout, the vertical mesh and the number of DOFs.
+through a complex EI(x)), the patch load through `rhs_fn`, and optionally
+line resonators (`resonator_array`, mass–spring–dashpot attached to the plate
+at `x_res`). `p` is any parameter struct with the host, forcing, sponge and
+discretisation fields of `L1_1_Params`; `lay` any layout with the fields of
+`layout` (L1-3 passes its own, sized at the resonator frequency, and sweeps
+`ω` on that mesh). Returns the plate deflection `ηh`, the resonator
+displacements `q`, the layout, the vertical mesh and the number of DOFs.
 """
-function solve(p::L1_1_Params)
-    lay = layout(p)
+function solve(p; ω::Real=p.ω, lay=layout(p), resonators::AbstractVector{ResonatorSpec}=ResonatorSpec[],
+               x_res::AbstractVector{<:Real}=Float64[])
+    length(resonators) == length(x_res) || throw(DimensionMismatch("one position per resonator"))
     vm = vertical_mesh(p, lay.he)
     H, L = p.H, lay.L
     vertical_map(x) = VectorValue(x[1], map_vertical_GP_for_const_dep(x[2] - H, vm.ratio, vm.ny, H; dbgmsg=false))
+    N = length(resonators)
     tank = G.TankDomain(L=L, H=H, nx=lay.nx, ny=vm.ny, map=vertical_map, is_periodic=(false, false),
-                        structure_domains=[G.StructureDomain(L=L, x₀=[0.0, 0.0], domain_symbol=:Γs)])
+                        structure_domains=[G.StructureDomain(L=L, x₀=[0.0, 0.0], domain_symbol=:Γs)],
+                        resonator_domains=G.ResonatorDomain[G.ResonatorDomain(location=[x, 0.0], delta_symbol=Symbol("δ$i"))
+                                           for (i, x) in enumerate(x_res)])
 
     fe(; kw...) = PH.FESpaceConfig(; order=p.order, vector_type=Vector{ComplexF64}, kw...)
     fluid = P.PotentialFlow(g=p.g, ρw=p.ρ, fe=fe(), space_domain_symbol=:Ω)
@@ -223,16 +232,27 @@ function solve(p::L1_1_Params)
     plate = P.TensionedEulerBernoulliBeam(L=L, mᵨ=p.m_ρ, EIᵨ=EI, Tᵨ=p.T_ρ, g=p.g, symbol=:η,
                                           fe=fe(γ=p.γ_penalty), space_domain_symbol=:Γs)
 
+    entities = P.PhysicsParameters[fluid, plate]
+    if N > 0   # HydroElasticFEM takes dimensional mass, stiffness and damping
+        push!(entities, P.resonator_array(N, [r.m_ρ * p.ρ for r in resonators], [r.k_ρ * p.ρ for r in resonators],
+                                          [r.c_ρ * p.ρ for r in resonators];
+                                          delta_domain_symbols=[Symbol("δ$i") for i in 1:N], ρw=p.ρ,
+                                          host_domain_symbol=:Γs,   # must match the plate's space domain
+                                          fe=PH.FESpaceConfig(space_type=VectorValue{1,Float64},
+                                                              vector_type=Vector{ComplexF64})))
+    end
+
     load(x) = abs(x[1] - lay.x_s) < lay.b / 2 ? complex(p.F / lay.b) : zero(ComplexF64)
     # `rhs_fn` returns one load per field, in the field order of the FieldMap
     # it receives (HydroElasticFEM's internal `_map`; no public accessor)
     field_order(fmap) = [s for (s, _) in sort!(collect(fmap._map); by=last)]
     rhs_fn = (ctx, fmap) -> [sym == :η ? load : 0.0 for sym in field_order(fmap)]
 
-    problem = S.build_problem(tank, P.PhysicsParameters[fluid, plate], PH.FreqDomainConfig(ω=p.ω); rhs_fn=rhs_fn)
+    problem = S.build_problem(tank, entities, PH.FreqDomainConfig(ω=ω); rhs_fn=rhs_fn)
     result = S.simulate(problem)
     ηh = result.solution[result.fmap[:η]]
-    return (; ηh, lay, vm, ndofs=length(get_free_dof_values(result.solution)))
+    q = ComplexF64[first(get_free_dof_values(result.solution[result.fmap[Symbol("q$i")]])) for i in 1:N]
+    return (; ηh, q, lay, vm, ndofs=length(get_free_dof_values(result.solution)))
 end
 
 # ─── Post-processing ────────────────────────────────────────────────────────

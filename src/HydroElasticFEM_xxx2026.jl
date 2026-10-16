@@ -19,7 +19,8 @@ module HydroElasticFEM_xxx2026
 include("references.jl")
 include("L1_1_bare_host_dispersion.jl")
 include("L1_2_flux_normalisation.jl")       # uses the L1-1 problem
+include("L1_3_single_line_resonator.jl")    # L1-1 problem with a resonator
 
-export References, L1_1, L1_2
+export References, L1_1, L1_2, L1_3
 
 end
